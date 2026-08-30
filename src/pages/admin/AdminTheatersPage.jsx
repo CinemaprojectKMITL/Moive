@@ -1,0 +1,22 @@
+import { useCallback, useEffect, useState } from 'react'
+import { Armchair, Edit3, Plus } from 'lucide-react'
+import { apiGet, apiPatch, apiPost } from '../../api/client'
+import { AdminPageHeader } from '../../components/admin/AdminPageHeader'
+import { Modal } from '../../components/admin/Modal'
+import { EmptyState } from '../../components/common/EmptyState'
+import { LoadingState } from '../../components/common/LoadingState'
+import { useToast } from '../../contexts/ToastContext'
+
+const blank = { branchId: '', name: '', code: '', rows: 15, seatsPerRow: 20, active: true }
+
+export function AdminTheatersPage() {
+  const [data, setData] = useState(null); const [branches, setBranches] = useState([]); const [editing, setEditing] = useState(null); const [form, setForm] = useState(blank); const [busy, setBusy] = useState(false); const { show } = useToast()
+  const load = useCallback(async () => { try { const [theaters, branchData] = await Promise.all([apiGet('/admin/theaters?limit=100'), apiGet('/admin/branches?limit=100')]); setData(theaters); setBranches(branchData.items) } catch (err) { show(err.message, 'error') } }, [show])
+  useEffect(() => { load() }, [load])
+  const open = (item) => { setEditing(item || {}); setForm(item ? { branchId: item.branchId, name: item.name, code: item.code, active: item.active } : { ...blank, branchId: branches[0]?._id || '' }) }
+  const submit = async (event) => { event.preventDefault(); setBusy(true); try { const payload = editing?._id ? { branchId: form.branchId, name: form.name, code: form.code, active: form.active } : { ...form, rows: Number(form.rows), seatsPerRow: Number(form.seatsPerRow) }; if (editing?._id) await apiPatch(`/admin/theaters/${editing._id}`, payload); else await apiPost('/admin/theaters', payload); show('บันทึกโรงภาพยนตร์แล้ว'); setEditing(null); load() } catch (err) { show(err.message, 'error') } finally { setBusy(false) } }
+  const branchName = (id) => branches.find((branch) => branch._id === (id?._id || id))?.name || '—'
+  return <><AdminPageHeader eyebrow="THEATER & SEAT LAYOUT" title="โรงภาพยนตร์" description="ผังที่นั่งเป็นข้อมูลแบบไดนามิก รองรับจำนวนที่นั่งต่างกันในอนาคต" action={<button className="btn-primary" onClick={() => open()}><Plus /> เพิ่มโรง</button>} />{!data ? <LoadingState /> : data.items.length ? <div className="admin-card-grid theaters">{data.items.map((theater) => <article className="admin-theater-card" key={theater._id}><div className="admin-item-icon"><Armchair /></div><span className={`status-dot ${theater.active ? 'active' : ''}`}>{theater.active ? 'Active' : 'Inactive'}</span><p className="eyebrow">{theater.code}</p><h2>{theater.name}</h2><p>{branchName(theater.branchId)}</p><div className="seat-count"><strong>{theater.seatCount}</strong><span>ที่นั่ง</span></div><button className="btn-secondary full" onClick={() => open(theater)}><Edit3 /> แก้ไขข้อมูล</button></article>)}</div> : <EmptyState title="ยังไม่มีโรงภาพยนตร์" />}
+    <Modal open={Boolean(editing)} onClose={() => setEditing(null)} title={editing?._id ? 'แก้ไขโรงภาพยนตร์' : 'เพิ่มโรงภาพยนตร์'}><form className="admin-form" onSubmit={submit}><div className="form-grid"><label>สาขา<select value={form.branchId} onChange={(e) => setForm({ ...form, branchId: e.target.value })} required>{branches.map((branch) => <option key={branch._id} value={branch._id}>{branch.name}</option>)}</select></label><label>ชื่อโรง<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label>รหัสโรง<input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} /></label>{!editing?._id && <><label>จำนวนแถว<input type="number" min="1" max="26" value={form.rows} onChange={(e) => setForm({ ...form, rows: e.target.value })} /></label><label>ที่นั่งต่อแถว<input type="number" min="1" max="50" value={form.seatsPerRow} onChange={(e) => setForm({ ...form, seatsPerRow: e.target.value })} /></label></>}<label className="check-label"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> เปิดใช้งาน</label></div>{!editing?._id && <p className="form-hint">ระบบจะสร้างผังที่นั่ง {Number(form.rows) * Number(form.seatsPerRow)} ที่นั่ง พร้อมประเภท Normal/Premium โดยอัตโนมัติ</p>}<div className="form-actions"><button type="button" className="btn-secondary" onClick={() => setEditing(null)}>ยกเลิก</button><button className="btn-primary" disabled={busy}>บันทึก</button></div></form></Modal>
+  </>
+}

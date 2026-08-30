@@ -1,0 +1,2 @@
+import { Modal } from './Modal'
+export function ConfirmDialog({ open, title, description, confirmLabel = 'ยืนยัน', onConfirm, onClose, busy }) { return <Modal open={open} title={title} onClose={onClose}><p className="confirm-copy">{description}</p><div className="form-actions"><button className="btn-secondary" onClick={onClose}>กลับ</button><button className="btn-danger" onClick={onConfirm} disabled={busy}>{busy ? 'กำลังดำเนินการ...' : confirmLabel}</button></div></Modal> }

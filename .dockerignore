@@ -1,0 +1,12 @@
+node_modules
+.git
+.env
+dist
+coverage
+logs
+*.log
+.DS_Store
+qrdata/payment/*
+qrdata/tickets/*
+!qrdata/payment/.gitkeep
+!qrdata/tickets/.gitkeep

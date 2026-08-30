@@ -1,0 +1,24 @@
+FROM node:22-alpine AS dependencies
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM dependencies AS development
+ENV NODE_ENV=development
+COPY . .
+EXPOSE 3000
+CMD ["npm", "run", "dev:api"]
+
+FROM dependencies AS production-dependencies
+RUN npm prune --omit=dev
+
+FROM node:22-alpine AS production
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY package.json ./
+COPY server ./server
+RUN mkdir -p migdata/logos migdata/banners migdata/movies migdata/shows qrdata/payment qrdata/tickets && chown -R node:node /app
+USER node
+EXPOSE 3000
+CMD ["node", "server/src/server.js"]

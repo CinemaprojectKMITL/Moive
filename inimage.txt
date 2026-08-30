@@ -1,0 +1,48 @@
+[Cinema Logo]
+File: src/components/layout/Navbar.jsx
+Line: 20
+Marker: REPLACE_CINEMA_LOGO_HERE
+Description: Current Vise ticket-mark and wordmark placeholder in the customer navigation.
+Replacement instructions: Replace the marked brand-mark/wordmark JSX with the final logo image or component. Keep an accessible home link and responsive dimensions.
+
+[Movie Poster Fallback]
+File: src/components/common/MoviePoster.jsx
+Line: 5
+Marker: REPLACE_MOVIE_FALLBACK_POSTER_HERE
+Description: Styled poster shown when a movie has no posterPath.
+Replacement instructions: Replace the marked fallback JSX with an approved licensed fallback asset while retaining the movie-specific alt/aria label and 2:3 ratio.
+
+[Banner Placeholder]
+File: src/pages/HomePage.jsx
+Line: 21
+Marker: REPLACE_BANNER_PLACEHOLDER_HERE
+Description: CSS-rendered cinematic hero background used when the active admin banner has no imagePath.
+Replacement instructions: Replace or extend the marked hero background with an approved banner asset. Preserve the text overlay contrast, responsive crop, and gradient fallback.
+
+[Payment QR Generator]
+File: server/src/services/PaymentQrService.js
+Line: 6
+Marker: REPLACE_PAYMENT_QR_GENERATOR_HERE
+Description: Replaceable demo payload builder used with the backend-authoritative booking amount.
+Replacement instructions: Replace buildPayload/generate with the real provider adapter. Continue reading the amount only from the persisted booking, never from request input, and return QR output through the protected endpoint.
+
+[Payment QR Target]
+File: .env.example
+Line: 17
+Marker: PAYMENT_QR_TARGET
+Description: Demo target/account value embedded in the mock payment payload.
+Replacement instructions: Set PAYMENT_QR_TARGET in .env or the deployment secret manager. Do not commit a real private credential.
+
+[Ticket QR]
+File: server/src/services/TicketService.js
+Line: 16
+Marker: REPLACE_TICKET_QR_GENERATOR_HERE
+Description: QR renderer for the deterministic signed ticket token.
+Replacement instructions: Replace only the renderer/provider if needed. Preserve signature verification, the stored token hash, ownership checks, and admin-only verification behavior.
+
+[Media Root]
+File: server/src/middleware/upload.js
+Line: 14
+Marker: MIGDATA_ROOT
+Description: Resolved filesystem root that constrains all public image uploads.
+Replacement instructions: Configure MIGDATA_ROOT through the environment, or replace the storage adapter with object storage. Preserve MIME/size validation, generated filenames, owner metadata, and path traversal protection.
