@@ -197,8 +197,10 @@ img { max-width: 100%; }
 .seat-button { position: relative; width: 30px; height: 31px; padding: 0; display: grid; place-items: center; color: var(--muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px 7px 9px 9px; transition: transform .15s, color .15s, background .15s; }
 .seat-button svg { width: 18px; }
 .seat-button span { position: absolute; inset: auto 0 1px; font-size: 7px; font-weight: 800; }
-.seat-button.available:hover { color: white; background: var(--red); border-color: var(--red); transform: translateY(-2px); }
-.seat-button.premium.available { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, var(--border)); background: color-mix(in srgb, var(--gold) 10%, var(--surface)); }
+.seat-button.available:hover {
+  transform: translateY(-2px);
+  cursor: pointer;
+}.seat-button.premium.available { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 55%, var(--border)); background: color-mix(in srgb, var(--gold) 10%, var(--surface)); }
 .seat-button.selected { color: white; background: var(--red); border-color: #ff4d5a; box-shadow: 0 0 12px rgb(220 38 38 / .5); }
 .seat-button.held { color: white; background: #b87714; border-color: #d99c3c; opacity: .75; }
 .seat-button.booked { color: #898b91; background: #3c3e43; border-color: #4b4d53; opacity: .65; }
