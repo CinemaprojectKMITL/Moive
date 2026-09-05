@@ -455,15 +455,81 @@ td code { color: var(--gold); font-family: ui-monospace, monospace; }
   .seat-header { grid-template-columns: 1fr auto; }
   .seat-header .back-link { grid-column: 1 / -1; }
   .seat-show-meta { flex-direction: column; gap: 3px; }
-  .seat-panel { padding: 10px; }
-  .seat-summary { padding: 16px; border-radius: 15px; display: none; }
-  .seat-summary.has-selection { display: block; }
-  .seat-summary h2 { margin-bottom: 8px; font-size: 18px; }
-  .seat-summary .eyebrow { display: none; }
-  .selected-list { display: flex; overflow-x: auto; }
-  .selected-list > div { min-width: 120px; }
-  .summary-total { padding: 10px 0; }
+
+  /* ส่วนผังที่นั่งที่แก้ไข (ไม่ยืดตามกัน) */
+  .seat-workspace {
+    align-items: start; /* ป้องกันไม่ให้กล่องลูกยืดตามกัน */
+  }
+
+  .seat-panel {
+    padding: 10px;
+    align-self: start; /* บังคับให้ความสูงจบแค่เนื้อหาตัวเอง */
+  }
+
+  /* ส่วนสรุปที่นั่ง (Mobile) */
+  .seat-summary {
+    padding: 16px;
+    border-radius: 15px;
+    display: none; /* ซ่อนเป็นค่าเริ่มต้นในมือถือ */
+    align-self: start; /* บังคับให้ความสูงจบแค่เนื้อหาตัวเอง */
+  }
+
+  .seat-summary.has-selection {
+    display: block; /* แสดงเมื่อมีการเลือกที่นั่ง */
+  }
+
+  .seat-summary h2 {
+    margin-bottom: 8px;
+    font-size: 18px;
+  }
+
+  .seat-summary .eyebrow {
+    display: none;
+  }
+
+  /* ส่วนสรุปที่นั่งที่แก้ไข (Mobile List Layout) */
+  .selected-list {
+    display: block; /* แก้ไข: เปลี่ยนจาก flex เป็น block เพื่อจัดรายการแนวตั้ง */
+    overflow-x: visible; /* แก้ไข: ไม่ต้องเลื่อนแนวนอน */
+    margin-top: 10px; /* เพิ่มระยะห่างด้านบน */
+  }
+
+  .selected-list > div {
+    display: flex; /* แก้ไข: จัดกลุ่มซ้ายขวาภายในแต่ละรายการ */
+    justify-content: space-between; /* แก้ไข: แยกกลุ่ม A1/Normal และ ราคา */
+    align-items: center; /* แก้ไข: จัดองค์ประกอบให้อยู่กลางตามแนวตั้ง */
+    padding: 10px 0; /* แก้ไข: เพิ่มระยะห่างระหว่างรายการ */
+    border-bottom: 1px solid var(--border); /* แก้ไข: เพิ่มเส้นคั่นระหว่างรายการ */
+  }
+
+  .selected-list > div:last-child {
+    border-bottom: none; /* แก้ไข: ลบเส้นคั่นของรายการสุดท้าย */
+  }
+
+  .selected-list > div span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .selected-list > div span small {
+    opacity: 0.7;
+  }
+
+  .selected-list > div strong {
+    color: #dc2626; /* แก้ไข: เพิ่มสีแดงให้ราคาเพื่อให้เด่นขึ้น */
+    font-weight: bold;
+    white-space: nowrap; /* แก้ไข: ป้องกันราคาพับบรรทัด */
+  }
+
+  .summary-total {
+    padding: 10px 0;
+    margin-top: 15px; /* เพิ่มระยะห่างด้านบน */
+  }
+
   .summary-total strong { font-size: 21px; }
+
+  /* ... styles ด้านล่างอื่นๆ ... */
   .checkout-main, .order-card { padding: 18px; }
   .checkout-heading h1 { font-size: 31px; }
   .booking-card { grid-template-columns: 1fr; padding: 17px; }
