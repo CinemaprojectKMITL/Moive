@@ -456,7 +456,8 @@ td code { color: var(--gold); font-family: ui-monospace, monospace; }
   .seat-header .back-link { grid-column: 1 / -1; }
   .seat-show-meta { flex-direction: column; gap: 3px; }
   .seat-panel { padding: 10px; }
-  .seat-summary { padding: 16px; border-radius: 15px; }
+  .seat-summary { padding: 16px; border-radius: 15px; display: none; }
+  .seat-summary.has-selection { display: block; }
   .seat-summary h2 { margin-bottom: 8px; font-size: 18px; }
   .seat-summary .eyebrow { display: none; }
   .selected-list { display: flex; overflow-x: auto; }
