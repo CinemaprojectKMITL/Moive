@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { THAI_MOVIE_RATING_CODES } from '../../../shared/movieRatings.js'
 
 export const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'รหัสข้อมูลไม่ถูกต้อง')
 const optionalDate = z.union([z.iso.datetime(), z.literal(''), z.null()]).optional()
@@ -20,10 +21,13 @@ export const movieSchema = z.object({
   description: z.string().trim().max(5000).optional().default(''),
   durationMinutes: z.coerce.number().int().min(1).max(600),
   genres: z.array(z.string().trim().min(1).max(50)).max(15).default([]),
-  ageRating: z.string().trim().max(20).optional().default('ทั่วไป'),
+  ageRating: z.enum(THAI_MOVIE_RATING_CODES).default('ท'),
   active: z.boolean().optional().default(true),
   releaseDate: optionalDate,
 }).strict()
+
+// PATCH must not apply the create default when a rating is omitted.
+export const movieUpdateSchema = movieSchema.partial().extend({ ageRating: z.enum(THAI_MOVIE_RATING_CODES).optional() }).strict()
 
 export const branchSchema = z.object({
   name: z.string().trim().min(1).max(200),

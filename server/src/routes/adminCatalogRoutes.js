@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { imageUpload } from '../middleware/upload.js'
 import { validate } from '../middleware/validate.js'
-import { bannerSchema, branchSchema, movieSchema, showSchema, showUpdateSchema, theaterSchema } from '../validators/schemas.js'
+import { bannerSchema, branchSchema, movieSchema, movieUpdateSchema, showSchema, showUpdateSchema, theaterSchema } from '../validators/schemas.js'
 import {
   archiveMovie, createBanner, createBranch, createMovie, createShow, createTheater, deleteBanner,
   listBookings, listResource, listShows, updateBanner, updateBranch, updateMovie, updateShow, updateTheater, uploadOwnerImage,
@@ -12,7 +12,7 @@ import { Movie } from '../models/Movie.js'
 const router = Router()
 router.get('/movies', listResource('movies'))
 router.post('/movies', validate(movieSchema), createMovie)
-router.patch('/movies/:id', validate(movieSchema.partial().strict()), updateMovie)
+router.patch('/movies/:id', validate(movieUpdateSchema), updateMovie)
 router.delete('/movies/:id', archiveMovie)
 router.post('/movies/:id/poster', imageUpload((req) => `movies/${req.params.id}`), uploadOwnerImage('movie', Movie, 'posterPath'))
 

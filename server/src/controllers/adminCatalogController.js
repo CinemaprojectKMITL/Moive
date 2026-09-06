@@ -99,7 +99,8 @@ export const uploadOwnerImage = (ownerType, Model, field) => asyncHandler(async 
   const mediaPath = publicMediaPath(req.file.path)
   await Media.create({ path: mediaPath, filename: req.file.filename, mimeType: req.file.mimetype, size: req.file.size, ownerType, ownerId: owner._id })
   owner[field] = mediaPath
-  await owner.save()
+  // Unknown legacy movie ratings remain readable and must not block an unrelated poster upload.
+  await owner.save(ownerType === 'movie' ? { validateModifiedOnly: true } : {})
   sendSuccess(res, owner)
 })
 

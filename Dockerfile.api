@@ -18,6 +18,7 @@ WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
 COPY package.json ./
 COPY server ./server
+COPY shared ./shared
 RUN mkdir -p migdata/logos migdata/banners migdata/movies migdata/shows qrdata/payment qrdata/tickets && chown -R node:node /app
 USER node
 EXPOSE 3000

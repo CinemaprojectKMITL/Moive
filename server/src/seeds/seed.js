@@ -21,11 +21,11 @@ const branchSeeds = [
 ]
 
 const movieSeeds = [
-  { title: 'นคราเหนือกาล', originalTitle: 'Beyond Nakhara', description: 'นักทำแผนที่หนุ่มค้นพบประตูสู่นครโบราณที่ปรากฏเพียงคืนเดือนดับ', durationMinutes: 128, genres: ['ผจญภัย', 'แฟนตาซี'], ageRating: '13+', active: true },
-  { title: 'ดาวดวงสุดท้าย', originalTitle: 'The Last Star', description: 'ภารกิจครั้งสุดท้ายของนักบินอวกาศที่ต้องเลือกระหว่างโลกและความจริง', durationMinutes: 142, genres: ['ไซไฟ', 'ดราม่า'], ageRating: '13+', active: true },
-  { title: 'เสียงเงียบในโรงแรม', originalTitle: 'Silent Suite', description: 'คืนเดียวในโรงแรมเก่าที่ทุกห้องซ่อนความลับเดียวกัน', durationMinutes: 105, genres: ['ระทึกขวัญ', 'ลึกลับ'], ageRating: '18+', active: true },
-  { title: 'วันนั้นของเรา', originalTitle: 'Our Day', description: 'เรื่องราวอบอุ่นของเพื่อนเก่าที่กลับมาพบกันในวันที่เมืองกำลังเปลี่ยนไป', durationMinutes: 116, genres: ['โรแมนติก', 'ดราม่า'], ageRating: 'ทั่วไป', active: true },
-  { title: 'ทีมป่วนทะลุมิติ', originalTitle: 'Portal Pals', description: 'ทีมเด็กแสบกับหุ่นยนต์จอมกวนออกเดินทางกู้จักรวาล', durationMinutes: 98, genres: ['แอนิเมชัน', 'ครอบครัว'], ageRating: 'ทั่วไป', active: true },
+  { title: 'นคราเหนือกาล', originalTitle: 'Beyond Nakhara', description: 'นักทำแผนที่หนุ่มค้นพบประตูสู่นครโบราณที่ปรากฏเพียงคืนเดือนดับ', durationMinutes: 128, genres: ['ผจญภัย', 'แฟนตาซี'], ageRating: 'น 13+', active: true },
+  { title: 'ดาวดวงสุดท้าย', originalTitle: 'The Last Star', description: 'ภารกิจครั้งสุดท้ายของนักบินอวกาศที่ต้องเลือกระหว่างโลกและความจริง', durationMinutes: 142, genres: ['ไซไฟ', 'ดราม่า'], ageRating: 'น 13+', active: true },
+  { title: 'เสียงเงียบในโรงแรม', originalTitle: 'Silent Suite', description: 'คืนเดียวในโรงแรมเก่าที่ทุกห้องซ่อนความลับเดียวกัน', durationMinutes: 105, genres: ['ระทึกขวัญ', 'ลึกลับ'], ageRating: 'น 18+', active: true },
+  { title: 'วันนั้นของเรา', originalTitle: 'Our Day', description: 'เรื่องราวอบอุ่นของเพื่อนเก่าที่กลับมาพบกันในวันที่เมืองกำลังเปลี่ยนไป', durationMinutes: 116, genres: ['โรแมนติก', 'ดราม่า'], ageRating: 'ท', active: true },
+  { title: 'ทีมป่วนทะลุมิติ', originalTitle: 'Portal Pals', description: 'ทีมเด็กแสบกับหุ่นยนต์จอมกวนออกเดินทางกู้จักรวาล', durationMinutes: 98, genres: ['แอนิเมชัน', 'ครอบครัว'], ageRating: 'ท', active: true },
 ]
 
 async function seedAdmin() {

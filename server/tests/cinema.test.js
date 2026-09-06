@@ -1,4 +1,7 @@
 import bcrypt from 'bcrypt'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
 import generatePayload from 'promptpay-qr'
@@ -17,11 +20,14 @@ let userBCookie
 let userA
 let userB
 let show
+let testMediaRoot
 
 const register = (username) => request(app).post('/api/auth/register').send({ username, password: 'secure-pass-123', displayName: username })
 const cookieFrom = (response) => response.headers['set-cookie']
 
 beforeAll(async () => {
+  testMediaRoot = await mkdtemp(path.join(tmpdir(), 'cinema-test-media-'))
+  process.env.MIGDATA_ROOT = testMediaRoot
   replSet = await MongoMemoryReplSet.create({ replSet: { count: 1, storageEngine: 'wiredTiger' } })
   process.env.NODE_ENV = 'test'
   process.env.MONGO_URI = replSet.getUri('cinema')
@@ -70,6 +76,7 @@ beforeEach(async () => {
 afterAll(async () => {
   if (mongoose) await mongoose.disconnect()
   if (replSet) await replSet.stop()
+  if (testMediaRoot) await rm(testMediaRoot, { recursive: true, force: true })
 })
 
 describe('authentication and authorization', () => {
@@ -341,6 +348,48 @@ describe('development-only debug settlement', () => {
     expect(capability.body.data.debugPaymentEnabled).toBe(false)
     expect((await models.Booking.findById(booking._id)).status).toBe('pending')
     expect(await models.Ticket.countDocuments({})).toBe(0)
+  })
+})
+
+describe('admin Thai movie ratings', () => {
+  const create = (ageRating) => request(app).post('/api/admin/movies').set('Cookie', adminCookie).send({ title: 'Rating test', durationMinutes: 120, ageRating })
+  it.each(['ส', 'ท', 'น 13+', 'น 15+', 'น 18+', 'ฉ 20+'])('creates a movie rated %s', async (ageRating) => {
+    const result = await create(ageRating)
+    expect(result.status).toBe(201)
+    expect((await models.Movie.findById(result.body.data._id)).ageRating).toBe(ageRating)
+  })
+
+  it('rejects arbitrary ratings on create and update', async () => {
+    expect((await create('PG-13')).status).toBe(400)
+    const movie = (await create('ท')).body.data
+    expect((await request(app).patch(`/api/admin/movies/${movie._id}`).set('Cookie', adminCookie).send({ ageRating: 'PG-13' })).status).toBe(400)
+    expect((await models.Movie.findById(movie._id)).ageRating).toBe('ท')
+  })
+
+  it('preserves a valid rating when editing other fields and accepts a canonical rating change', async () => {
+    const movie = (await create('น 18+')).body.data
+    const edit = await request(app).patch(`/api/admin/movies/${movie._id}`).set('Cookie', adminCookie).send({ title: 'Changed' })
+    expect(edit.status).toBe(200)
+    expect(edit.body.data.ageRating).toBe('น 18+')
+    const changed = await request(app).patch(`/api/admin/movies/${movie._id}`).set('Cookie', adminCookie).send({ ageRating: 'ฉ 20+' })
+    expect(changed.status).toBe(200)
+    expect(changed.body.data.ageRating).toBe('ฉ 20+')
+  })
+
+  it.each(['13+', 'PG-13'])('keeps legacy %s readable, supports poster upload/archive, and allows explicit normalization', async (legacy) => {
+    const movie = (await create('ท')).body.data
+    await models.Movie.collection.updateOne({ _id: new mongoose.Types.ObjectId(movie._id) }, { $set: { ageRating: legacy } })
+    const list = await request(app).get('/api/admin/movies').set('Cookie', adminCookie)
+    expect(list.body.data.items.find((item) => item._id === movie._id).ageRating).toBe(legacy)
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aZfoAAAAASUVORK5CYII=', 'base64')
+    const upload = await request(app).post(`/api/admin/movies/${movie._id}/poster`).set('Cookie', adminCookie).attach('image', png, { filename: 'poster.png', contentType: 'image/png' })
+    expect(upload.status).toBe(200)
+    expect(upload.body.data.posterPath).toMatch(/^\/media\/movies\//)
+    expect(upload.body.data.ageRating).toBe(legacy === '13+' ? 'น 13+' : legacy)
+    expect((await request(app).delete(`/api/admin/movies/${movie._id}`).set('Cookie', adminCookie)).status).toBe(200)
+    const edit = await request(app).patch(`/api/admin/movies/${movie._id}`).set('Cookie', adminCookie).send({ ageRating: 'น 13+' })
+    expect(edit.status).toBe(200)
+    expect(edit.body.data.ageRating).toBe('น 13+')
   })
 })
 

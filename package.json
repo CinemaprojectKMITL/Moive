@@ -9,7 +9,7 @@
     "dev:api": "node --watch server/src/server.js",
     "start": "node server/src/server.js",
     "build": "vite build",
-    "lint": "oxlint src server vite.config.js",
+    "lint": "oxlint src server shared vite.config.js",
     "preview": "vite preview",
     "seed": "node server/src/seeds/seed.js",
     "test": "vitest run",
