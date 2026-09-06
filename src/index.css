@@ -364,6 +364,9 @@ td code { color: var(--gold); font-family: ui-monospace, monospace; }
 .form-hint, .confirm-copy { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .verification-result { margin-top: 18px; padding: 15px; display: flex; gap: 12px; color: #15803d; background: rgb(22 163 74 / .1); border: 1px solid rgb(22 163 74 / .2); border-radius: 11px; }
 .verification-result h3, .verification-result p { margin: 0; }
+.ticket-scanner { display: grid; gap: 10px; min-width: 0; margin-bottom: 18px; }
+.ticket-scanner-preview { width: 100%; max-width: 100%; min-width: 0; aspect-ratio: 4 / 3; max-height: 40vh; object-fit: contain; background: #000; border-radius: 9px; }
+.ticket-scanner-error { margin: 0; color: var(--red); font-size: 12px; line-height: 1.7; }
 .mobile-only { display: none; }
 .sidebar-backdrop { display: none; }
 @media (max-width: 1180px) {
