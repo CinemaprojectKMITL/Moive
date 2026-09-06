@@ -18,8 +18,9 @@ const schema = z.object({
   BOOKING_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(1000).default(10000),
   STRICT_RACE_CANCEL_BOTH: booleanFromEnv(true),
   RACE_WINDOW_MS: z.coerce.number().int().min(0).max(2000).default(300),
-  PAYMENT_QR_TARGET: z.string().default('0864117841'),    //qr
-  ENABLE_MOCK_PAYMENT: booleanFromEnv(true),
+  // Validate at QR generation time so missing payment configuration does not disable the catalog.
+  PAYMENT_QR_TARGET: z.string().optional(),
+  ENABLE_DEBUG_PAYMENT: booleanFromEnv(false),
   MAX_UPLOAD_MB: z.coerce.number().positive().max(25).default(5),
   THEATER_CLEANUP_MINUTES: z.coerce.number().int().min(0).max(120).default(15),
   MIGDATA_ROOT: z.string().default('migdata'),
@@ -34,3 +35,4 @@ if (parsed.NODE_ENV === 'production' && !parsed.JWT_SECRET) {
 }
 export const env = { ...parsed, JWT_SECRET: parsed.JWT_SECRET || crypto.randomBytes(48).toString('hex') }
 export const isProduction = env.NODE_ENV === 'production'
+export const isDebugPaymentEnabled = () => env.NODE_ENV !== 'production' && env.ENABLE_DEBUG_PAYMENT === true

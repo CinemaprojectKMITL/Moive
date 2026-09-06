@@ -114,25 +114,25 @@ services:
     networks:
       - cinema
 
-  cloudflare-tunnel-Moive:
-    image: cloudflare/cloudflared:latest
-    container_name: cloudflared-tunnel-Moive
-    restart: unless-stopped
+  # cloudflare-tunnel-Moive:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: cloudflared-tunnel-Moive
+  #   restart: unless-stopped
 
-    command:
-      - tunnel
-      - --no-autoupdate
-      - run
+  #   command:
+  #     - tunnel
+  #     - --no-autoupdate
+  #     - run
 
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   environment:
+  #     TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
 
-    depends_on:
-      web:
-        condition: service_started
+  #   depends_on:
+  #     web:
+  #       condition: service_started
 
-    networks:
-      - cinema
+  #   networks:
+  #     - cinema
 
 
 volumes:

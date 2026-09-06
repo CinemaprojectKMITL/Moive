@@ -21,15 +21,15 @@ Replacement instructions: Replace or extend the marked hero background with an a
 [Payment QR Generator]
 File: server/src/services/PaymentQrService.js
 Line: 6
-Marker: REPLACE_PAYMENT_QR_GENERATOR_HERE
-Description: Replaceable demo payload builder used with the backend-authoritative booking amount.
-Replacement instructions: Replace buildPayload/generate with the real provider adapter. Continue reading the amount only from the persisted booking, never from request input, and return QR output through the protected endpoint.
+Status: PromptPay EMV payload generation via promptpay-qr, rendered by qrcode as an SVG image data URL.
+Description: Uses only the backend-configured recipient and authoritative booking amount. No payload or target is persisted.
+Integration TODO: Add trusted payment verification before marking a booking paid. Keep ownership, expiry, held-seat and amount checks on the protected endpoint.
 
 [Payment QR Target]
 File: .env.example
 Line: 17
 Marker: PAYMENT_QR_TARGET
-Description: Demo target/account value embedded in the mock payment payload.
+Description: Server-only registered PromptPay recipient used for QR routing.
 Replacement instructions: Set PAYMENT_QR_TARGET in .env or the deployment secret manager. Do not commit a real private credential.
 
 [Ticket QR]

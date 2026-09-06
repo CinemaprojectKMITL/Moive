@@ -224,6 +224,8 @@ img { max-width: 100%; }
 .status-pill.holding, .status-pill.pending, .status-pill.scheduled { color: #b45309; background: rgb(245 158 11 / .13); }
 .status-pill.cancelled, .status-pill.expired, .status-pill.closed { color: #b91c1c; background: rgb(220 38 38 / .12); }
 .payment-card { width: min(100%, 400px); margin: 0 auto; text-align: center; }
+.payment-brand-logo { display: block; height: 40px; width: auto; margin: 0 auto 20px; object-fit: contain; }
+.payment-reference { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
 .timer-box { margin-bottom: 17px; padding: 13px; display: grid; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 13px; }
 .timer-box strong { color: var(--red); font-size: 35px; font-variant-numeric: tabular-nums; }
 .timer-box small { font-size: 9px; }

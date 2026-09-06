@@ -20,8 +20,9 @@ const bookingSchema = new mongoose.Schema({
   theaterSnapshot: { type: Object, required: true },
   showTimeSnapshot: { type: Date, required: true },
   payment: {
-    target: String,
-    qrPayload: String,
+    // Legacy demo records may contain these fields; never return them or write new values.
+    target: { type: String, select: false },
+    qrPayload: { type: String, select: false },
     generatedAt: Date,
     paidAt: Date,
   },

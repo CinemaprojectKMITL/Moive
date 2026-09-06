@@ -1,6 +1,6 @@
 # CEDT Cinema
 
-CEDT Cinema is a production-oriented cinema booking demo built as a modular monolith. It includes a responsive customer site, authentication, branch/movie/show browsing, a data-driven seat map, transaction-safe booking, five-minute holds, mock QR payment, signed ticket QR codes, booking history, cinema administration, POS analytics, secure local media storage, automated expiry, and Docker environments.
+CEDT Cinema is a production-oriented cinema booking demo built as a modular monolith. It includes a responsive customer site, authentication, branch/movie/show browsing, a data-driven seat map, transaction-safe booking, five-minute holds, PromptPay QR generation, signed ticket QR codes, booking history, cinema administration, POS analytics, secure local media storage, automated expiry, and Docker environments.
 
 The default UI language is Thai. It supports light, dark, and operating-system themes on desktop, tablet, and mobile.
 
@@ -94,9 +94,9 @@ Login and registration have dedicated rate limits. The general cinema API is not
 5. A MongoDB transaction atomically acquires every seat and creates one holding booking.
 6. The five-minute server hold starts only after checkout is pressed.
 7. The protected checkout page polls every three seconds and displays the server expiry.
-8. Mock confirmation atomically marks the booking paid, converts its owned seats to booked, and creates one ticket.
+8. PromptPay QR generation leaves the booking pending. A trusted payment verifier is required for real settlement; development can explicitly enable debug confirmation to test seat finalization and ticket issuance.
 
-Client double-clicks are covered by a unique `{ userId, clientRequestId }` booking index. Repeating a payment confirmation returns the existing paid booking/ticket rather than creating another ticket.
+Client double-clicks are covered by a unique `{ userId, clientRequestId }` booking index. Repeated QR requests reuse the existing booking without extending its expiry or issuing a ticket.
 
 ## Seat locking and concurrency
 
@@ -113,7 +113,7 @@ The same operation writes `heldByBookingId`, `heldByUserId`, and `holdExpiresAt`
 
 Multi-seat checkout runs inside a MongoDB transaction. Seats are acquired in sorted order, and booking creation commits with all locks. If any seat conflicts, the transaction aborts; no earlier seat from that group remains held. The test suite launches two real concurrent HTTP checkouts against the same seat and asserts that only one active owner can exist.
 
-Payment is another transaction. It changes only seats whose `status`, `heldByBookingId`, `heldByUserId`, and unexpired hold all match the booking. The modified count must equal the booking's seat count before the booking becomes paid.
+QR generation checks seats whose `status`, `heldByBookingId`, `heldByUserId`, and unexpired hold match the booking, then transactionally records the pending state. `BookingFinalizationService.finalizePaidBooking` atomically converts those seats, issues one signed ticket, and changes `pending` to `paid`. It is an internal settlement primitive shared by debug confirmation and future trusted verifiers; QR generation never calls it.
 
 Release and expiry always query `heldByBookingId` plus `status: held`. They never release by seat code alone. Consequently, expiring booking A cannot make a seat owned by booking B available, and booked/paid seats never match a release query.
 
@@ -145,9 +145,19 @@ Show creation validates movie, branch, theater membership, future times, booking
 
 After active or paid bookings exist, the API rejects changes to a show's movie, branch, theater, time, or price. Cancelling a show retains all history, cancels/releases unpaid bookings, and keeps paid bookings/tickets for operational follow-up. Refund processing is outside this demo.
 
-## Payment demo and ticket QR
+## PromptPay payment and ticket QR
 
-`PaymentQrService` generates a replaceable QR payload from `PAYMENT_QR_TARGET` and the booking's server-calculated amount. `ENABLE_MOCK_PAYMENT=true` exposes the development/demo confirmation action. Set it to `false` outside demo environments.
+`GET /api/bookings/:id/payment-qr` authenticates the caller, checks booking ownership, expiry and held-seat ownership, and generates a PromptPay EMV payload with `promptpay-qr` from the persisted THB total. `qrcode` renders a black-on-white SVG with a four-module quiet zone, returned as an image data URL. The response includes amount, currency, booking ID, status and the original expiry; it is private/no-store. Repeated requests never create another booking or extend its hold. Submitted amounts are ignored.
+
+Set `PAYMENT_QR_TARGET` only in backend `.env` or deployment secrets. It accepts a Thai mobile number, a 13-digit citizen/tax ID, or a 15-digit PromptPay wallet ID; spaces and hyphens are normalized. Placeholder/missing/invalid values produce `PAYMENT_CONFIGURATION_ERROR` (503). Format validation cannot establish that a recipient is registered with a bank. No raw recipient field or payload is saved or returned separately. Legacy demo fields are excluded from model queries; deployments with historical demo data should purge their old `payment.target` and `payment.qrPayload` fields under their data-retention process.
+
+There is no bank API, gateway webhook, or verified-slip service. Generating, displaying or scanning a QR does not mark the booking paid. Status stays `pending` until trusted settlement, cancellation/expiry, or an explicitly enabled development simulation. Do not operate this as an unattended production payment system yet.
+
+For development only, set `ENABLE_DEBUG_PAYMENT=true` and `VITE_ENABLE_DEBUG_PAYMENT=true` in ignored `.env`, then restart API and Vite. Both flags default to disabled in `.env.example`. `POST /api/bookings/:id/debug-confirm-payment` returns 404 unless the backend flag is true AND `NODE_ENV` is not `production`. Only the authenticated owner may confirm a pending, unexpired booking; even administrators cannot confirm another user's booking. Request body amounts/status/seats are ignored. The internal finalizer checks stored amounts and exact seat ownership, and uses a transaction to prevent partial or duplicate settlement. No fake bank transaction IDs are recorded.
+
+The checkout button requires both frontend opt-in and the backend's non-sensitive capability flag. Vite includes it only in the development server, never in build/preview output (even when local `.env` sets `NODE_ENV=development`). It is labelled **Debug: Mark as Paid** with a simulation warning, retains the PromptPay QR until confirmation, and then uses the normal ticket success UI. This action is not evidence of a PromptPay transfer.
+
+TODO: integrate authenticated, idempotent payment verification with recipient/amount checks, transaction reference reconciliation, atomic seat/ticket issuance, and late/duplicate payment handling. PromptPay payloads contain routing information and an amount, but no enforceable booking expiry or unique booking reference. Hiding an expired QR cannot revoke a screenshot already saved by a customer or prevent a late bank transfer. Checkout removes the QR at the hold deadline and the existing expiry service releases seats; a future verifier must handle late transfers safely.
 
 Ticket QR content is a signed token containing opaque identifiers, not user credentials. MongoDB stores its SHA-256 hash. The admin-only verify endpoint validates the signature, hash, ticket state, and optional consume transition.
 
@@ -222,7 +232,7 @@ npm run build
 
 ## Production
 
-Create `.env` from the example and provide a strong unique `JWT_SECRET`. Disable mock payment unless this remains a private demo. Run the standalone production Compose file:
+Create `.env` from the example and provide a strong unique `JWT_SECRET`. Configure a registered PromptPay target and integrate trusted payment verification before accepting production payments. Run the standalone production Compose file:
 
 ```bash
 docker compose -f docker-compose.prod.yml up --build -d
@@ -248,8 +258,9 @@ Use TLS at the external reverse proxy in a real deployment because production au
 | `BOOKING_CLEANUP_INTERVAL_MS` | `10000` |
 | `STRICT_RACE_CANCEL_BOTH` | `true` |
 | `RACE_WINDOW_MS` | `300` |
-| `PAYMENT_QR_TARGET` | demo payment target |
-| `ENABLE_MOCK_PAYMENT` | development/demo only |
+| `PAYMENT_QR_TARGET` | server-only registered PromptPay target; placeholders disable QR generation |
+| `ENABLE_DEBUG_PAYMENT` | backend opt-in for debug settlement; always blocked in production |
+| `VITE_ENABLE_DEBUG_PAYMENT` | non-sensitive development UI opt-in; excluded from build/preview output |
 | `MAX_UPLOAD_MB` | `5` |
 | `MIGDATA_ROOT` | `migdata` |
 | `QRDATA_ROOT` | `qrdata` |
@@ -276,7 +287,7 @@ The integration suite creates an isolated MongoDB replica set and covers:
 - multi-seat holds and transaction rollback;
 - manipulated client price ignored in favor of show pricing;
 - expiry and booking ownership release safety;
-- atomic and idempotent payment/ticket issuance;
+- PromptPay EMV/CRC validation, authoritative amounts, repeated QR requests, unchanged expiry, and blocked unverified payment confirmation;
 - cross-user booking/payment/cancel privacy;
 - concurrent same-seat checkout with at most one owner;
 - strict-race cancel-both behavior with no remaining lock.
@@ -308,7 +319,7 @@ Expected status codes include 201 for creation, 400 for invalid input, 401/403 f
 
 ## Known limitations
 
-- Payment confirmation is mocked; there is no bank/webhook reconciliation, refund engine, SMS, email, or OTP.
+- PromptPay QR generation and optional development-only simulated settlement are implemented; real payment verification still requires trusted bank/webhook/slip reconciliation. There is no refund engine, SMS, email, or OTP.
 - The Docker database is a single-node replica set intended for development/demo durability, not multi-node high availability.
 - Strict-race detection is MongoDB-based and bounded to one database cluster; no Redis/distributed cross-cluster coordination is implemented.
 - Seat availability uses periodic refresh and checkout-time validation rather than WebSockets.

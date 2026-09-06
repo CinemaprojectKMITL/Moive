@@ -46,17 +46,17 @@ assert(bookingResult.response.status === 201, `Checkout failed: ${bookingResult.
 const booking = bookingResult.payload.data
 
 const paymentQr = await call(`/bookings/${booking._id}/payment-qr`, { cookie: cookieA })
-assert(paymentQr.payload.data.dataUrl.startsWith('data:image/png;base64,'), 'Payment QR was not generated')
-const paid = await call(`/bookings/${booking._id}/mock-confirm`, { cookie: cookieA, method: 'POST' })
-assert(paid.payload.data.booking.status === 'paid', 'Mock payment did not become paid')
+assert(paymentQr.response.status === 200 && paymentQr.payload.data.dataUrl.startsWith('data:image/svg+xml;base64,'), 'PromptPay QR was not generated; configure a valid backend target')
+assert(paymentQr.payload.data.amount === booking.totalPrice, 'Payment amount differs from booking')
+assert(paymentQr.payload.data.expiresAt === booking.expiresAt, 'QR changed the booking expiry')
+const paymentBooking = await call(`/bookings/${booking._id}`, { cookie: cookieA })
+assert(paymentBooking.payload.data.status === 'pending', 'QR must leave payment pending')
 const ticket = await call(`/bookings/${booking._id}/ticket-qr`, { cookie: cookieA })
-assert(ticket.payload.data.dataUrl.startsWith('data:image/png;base64,'), 'Ticket QR was not generated')
+assert(ticket.response.status === 409, 'Unverified payment must not issue a ticket')
 const adminLogin = await call('/auth/login', { method: 'POST', body: { username: process.env.QA_ADMIN_USERNAME || 'admin', password: process.env.QA_ADMIN_PASSWORD || 'change-me' } })
 assert(adminLogin.response.status === 200 && adminLogin.payload.data.user.role === 'admin', 'Seeded admin login failed')
 const analytics = await call('/admin/analytics', { cookie: adminLogin.cookie })
 assert(analytics.response.status === 200 && analytics.payload.data.kpis, 'Admin analytics failed')
-const verifiedTicket = await call('/admin/tickets/verify', { cookie: adminLogin.cookie, method: 'POST', body: { token: ticket.payload.data.token, consume: false } })
-assert(verifiedTicket.payload.data.valid === true, 'Admin ticket verification failed')
 const userAdminAttempt = await call('/admin/analytics', { cookie: cookieA })
 assert(userAdminAttempt.response.status === 403, 'Normal user reached admin analytics')
 
@@ -73,7 +73,7 @@ console.log(JSON.stringify({
   status: 'ok',
   health: health.payload.data,
   catalog: { branches: home.payload.data.branches.length, theaters: home.payload.data.theaterCount, movies: home.payload.data.movies.length, showSeats: seatMap.payload.data.seats.length },
-  booking: { id: booking._id, status: paid.payload.data.booking.status, ticketQr: true },
-  admin: { login: true, analytics: true, ticketVerified: true, userBlocked: true },
+  booking: { id: booking._id, status: paymentBooking.payload.data.status, ticketIssued: false },
+  admin: { login: true, analytics: true, userBlocked: true },
   strictRace: { seat: raceSeat, responses: raceResponses.map((result) => result.payload.code), finalSeatStatus: 'available' },
 }, null, 2))
