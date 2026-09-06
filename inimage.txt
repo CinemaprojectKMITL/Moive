@@ -1,9 +1,8 @@
 [Cinema Logo]
 File: src/components/layout/Navbar.jsx
-Line: 20
-Marker: REPLACE_CINEMA_LOGO_HERE
-Description: Current Vise ticket-mark and wordmark placeholder in the customer navigation.
-Replacement instructions: Replace the marked brand-mark/wordmark JSX with the final logo image or component. Keep an accessible home link and responsive dimensions.
+Assets: src/assets/cedt-logo-full.svg, src/assets/cedt-logo-responsive.svg, src/assets/cedt-logo-icon.svg
+Status: CEDT SVG branding is integrated in navigation, authentication, footer, poster fallback, admin sidebar, and favicon.
+Guidance: Keep accessible logo links and responsive dimensions when updating these assets.
 
 [Movie Poster Fallback]
 File: src/components/common/MoviePoster.jsx

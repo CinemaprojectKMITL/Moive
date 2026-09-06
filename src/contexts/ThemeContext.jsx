@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 const ThemeContext = createContext(null)
 
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(() => localStorage.getItem('vise-theme') || 'system')
+  // Read the legacy key so existing visitors retain their theme preference.
+  const [theme, setTheme] = useState(() => localStorage.getItem('cedt-theme') || localStorage.getItem('vise-theme') || 'system')
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const apply = () => {
@@ -14,7 +15,7 @@ export function ThemeProvider({ children }) {
     }
     apply()
     media.addEventListener('change', apply)
-    localStorage.setItem('vise-theme', theme)
+    localStorage.setItem('cedt-theme', theme)
     return () => media.removeEventListener('change', apply)
   }, [theme])
   const value = useMemo(() => ({ theme, setTheme }), [theme])

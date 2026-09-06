@@ -1,6 +1,6 @@
-# Vise Cinema
+# CEDT Cinema
 
-Vise Cinema is a production-oriented cinema booking demo built as a modular monolith. It includes a responsive customer site, authentication, branch/movie/show browsing, a data-driven seat map, transaction-safe booking, five-minute holds, mock QR payment, signed ticket QR codes, booking history, cinema administration, POS analytics, secure local media storage, automated expiry, and Docker environments.
+CEDT Cinema is a production-oriented cinema booking demo built as a modular monolith. It includes a responsive customer site, authentication, branch/movie/show browsing, a data-driven seat map, transaction-safe booking, five-minute holds, mock QR payment, signed ticket QR codes, booking history, cinema administration, POS analytics, secure local media storage, automated expiry, and Docker environments.
 
 The default UI language is Thai. It supports light, dark, and operating-system themes on desktop, tablet, and mobile.
 

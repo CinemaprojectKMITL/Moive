@@ -13,11 +13,11 @@ import { normalizeUsername } from '../utils/normalize.js'
 import { createSeatLayout } from '../utils/seatLayout.js'
 
 const branchSeeds = [
-  ['BKK-CENTRAL', 'Vise Central World', 'ชั้น 7 ศูนย์การค้าเซ็นทรัลเวิลด์ กรุงเทพมหานคร'],
-  ['BKK-RAMA9', 'Vise Rama 9', 'ถนนรัชดาภิเษก เขตห้วยขวาง กรุงเทพมหานคร'],
-  ['BKK-BANGKAPI', 'Vise Bangkapi', 'ถนนลาดพร้าว เขตบางกะปิ กรุงเทพมหานคร'],
-  ['NON-RATANA', 'Vise Rattanathibet', 'ถนนรัตนาธิเบศร์ จังหวัดนนทบุรี'],
-  ['SPK-MEGA', 'Vise Mega Bangna', 'ถนนบางนา-ตราด จังหวัดสมุทรปราการ'],
+  ['BKK-CENTRAL', 'CEDT Central World', 'ชั้น 7 ศูนย์การค้าเซ็นทรัลเวิลด์ กรุงเทพมหานคร'],
+  ['BKK-RAMA9', 'CEDT Rama 9', 'ถนนรัชดาภิเษก เขตห้วยขวาง กรุงเทพมหานคร'],
+  ['BKK-BANGKAPI', 'CEDT Bangkapi', 'ถนนลาดพร้าว เขตบางกะปิ กรุงเทพมหานคร'],
+  ['NON-RATANA', 'CEDT Rattanathibet', 'ถนนรัตนาธิเบศร์ จังหวัดนนทบุรี'],
+  ['SPK-MEGA', 'CEDT Mega Bangna', 'ถนนบางนา-ตราด จังหวัดสมุทรปราการ'],
 ]
 
 const movieSeeds = [
@@ -74,7 +74,7 @@ async function seedBanners() {
     { upsert: true },
   )
   await Banner.findOneAndUpdate(
-    { title: 'Vise Premiere' },
+    { title: 'CEDT Premiere' },
     { $set: { subtitle: 'สัมผัสที่นั่งพรีเมียมและระบบเสียงเหนือระดับ', ctaLabel: 'ดูภาพยนตร์', ctaUrl: '/', enabled: true, sortOrder: 2 } },
     { upsert: true },
   )

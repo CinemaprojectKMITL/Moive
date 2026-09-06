@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Film, LockKeyhole, UserRound } from 'lucide-react'
+import { LockKeyhole, UserRound } from 'lucide-react'
+import cedtLogo from '../assets/cedt-logo-full.svg'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -21,7 +22,7 @@ export function AuthPage({ mode }) {
       navigate(location.state?.from?.pathname || '/')
     } catch (err) { setError(err.message); show(err.message, 'error') } finally { setSubmitting(false) }
   }
-  return <div className="auth-page"><div className="auth-visual"><div><Film size={42} /><p className="eyebrow">VISE MEMBERSHIP</p><h1>เรื่องราวดี ๆ<br />เริ่มจากที่นั่งของคุณ</h1><p>จองง่าย ปลอดภัย และเก็บทุกตั๋วไว้ในที่เดียว</p></div></div><div className="auth-form-wrap"><form className="auth-form" onSubmit={submit}><p className="eyebrow">{isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</p><h2>{isRegister ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2><p className="muted">{isRegister ? 'เริ่มต้นประสบการณ์ชมภาพยนตร์ของคุณ' : 'จัดการการจองและตั๋วของคุณ'}</p>
+  return <div className="auth-page"><div className="auth-visual"><div><Link to="/" aria-label="CEDT Cinema หน้าหลัก"><img className="auth-brand-logo" src={cedtLogo} alt="CEDT Cinema" /></Link><p className="eyebrow">CEDT MEMBERSHIP</p><h1>เรื่องราวดี ๆ<br />เริ่มจากที่นั่งของคุณ</h1><p>จองง่าย ปลอดภัย และเก็บทุกตั๋วไว้ในที่เดียว</p></div></div><div className="auth-form-wrap"><form className="auth-form" onSubmit={submit}><p className="eyebrow">{isRegister ? 'CREATE ACCOUNT' : 'WELCOME BACK'}</p><h2>{isRegister ? 'สมัครสมาชิก' : 'เข้าสู่ระบบ'}</h2><p className="muted">{isRegister ? 'เริ่มต้นประสบการณ์ชมภาพยนตร์ของคุณ' : 'จัดการการจองและตั๋วของคุณ'}</p>
     {error && <div className="form-error" role="alert">{error}</div>}
     {isRegister && <label>ชื่อที่แสดง (ไม่บังคับ)<span className="input-wrap"><UserRound size={18} /><input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} placeholder="ชื่อของคุณ" autoComplete="name" /></span></label>}
     <label>ชื่อผู้ใช้<span className="input-wrap"><UserRound size={18} /><input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required minLength={3} autoComplete="username" placeholder="username" /></span></label>
