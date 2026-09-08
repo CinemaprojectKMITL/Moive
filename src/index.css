@@ -570,7 +570,7 @@ td code { color: var(--gold); font-family: ui-monospace, monospace; }
 .close-btn:hover { transform: scale(1.1); }
 .ticket-modal-body { padding: 24px; display: flex; flex-direction: column; align-items: center; }
 .qr-container { background-color: #ffffff; padding: 12px; border-radius: 8px; margin-bottom: 24px; }
-.qr-image { width: 160px; height: 160px; display: block; }
+.qr-image { width: 250px; height: 250px; display: block; }
 .qr-loading { width: 184px; height: 184px; display: flex; align-items: center; justify-content: center; background-color: #333333; border-radius: 8px; margin-bottom: 24px; color: #888888; }
 .ticket-info-wrapper { display: flex; width: 100%; gap: 16px; align-items: flex-start; }
 .ticket-poster { width: 80px; height: 120px; object-fit: cover; border-radius: 6px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4); }
