@@ -229,7 +229,7 @@ img { max-width: 100%; }
 .timer-box { margin-bottom: 17px; padding: 13px; display: grid; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 13px; }
 .timer-box strong { color: var(--red); font-size: 35px; font-variant-numeric: tabular-nums; }
 .timer-box small { font-size: 9px; }
-.payment-qr { width: min(100%, 300px); padding: 12px; background: white; border-radius: 15px; }
+.payment-qr { width: min(100%, 400px); padding: 12px; background: white; border-radius: 15px; }
 .payment-target { margin: 12px 0 20px; font-weight: 750; }
 .payment-card .btn-text { margin-top: 5px; }
 .order-card h2 { margin: 0; font-size: 25px; }
