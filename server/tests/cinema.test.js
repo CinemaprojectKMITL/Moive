@@ -6,7 +6,7 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server'
 import request from 'supertest'
 import generatePayload from 'promptpay-qr'
 import QRCode from 'qrcode'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let replSet
 let mongoose
@@ -98,6 +98,161 @@ describe('authentication and authorization', () => {
     expect((await request(app).get('/api/admin/movies').set('Cookie', userACookie)).status).toBe(403)
     expect((await request(app).post('/api/admin/movies').set('Cookie', userACookie).send({ title: 'Forbidden', durationMinutes: 90, genres: [] })).status).toBe(403)
     expect((await request(app).get('/api/admin/movies').set('Cookie', adminCookie)).status).toBe(200)
+  })
+})
+
+describe('movie API request IDs', () => {
+  const initial = (cookie = userACookie) => request(app).post(`/api/movies/${show.movieId}/request-access`).set('Cookie', cookie)
+  const reuse = (id, userId = userA._id, movieId = show.movieId, cookie = userACookie) => request(app).get(`/api/movies/${movieId}/${userId}/${id}`).set('Cookie', cookie)
+
+  it('blocks direct detail and shows bypasses even with authentication', async () => {
+    for (const movieId of [show.movieId, '6a9d6a50e4141b46136898ca']) {
+      for (const suffix of ['', '/shows']) {
+        for (const cookie of [null, userACookie]) {
+          const call = request(app).get(`/api/movies/${movieId}${suffix}`)
+          if (cookie) call.set('Cookie', cookie)
+          const result = await call
+          expect(result.status).toBe(404)
+          expect(result.body).not.toHaveProperty('data')
+        }
+      }
+    }
+    expect((await request(app).get(`/api/movies/${show.movieId}/request-access`)).status).toBe(404)
+    expect((await request(app).post(`/api/movies/${show.movieId}/request-access`)).status).toBe(401)
+    expect((await request(app).get('/api/admin/movies')).status).toBe(401)
+    expect((await request(app).get('/api/admin/movies').set('Cookie', adminCookie)).status).toBe(200)
+  })
+
+  it('public catalogs expose summaries rather than full movie details', async () => {
+    await models.Movie.updateOne({ _id: show.movieId }, { $set: { description: 'Protected movie description', originalTitle: 'Protected original title' } })
+    for (const path of ['/api/movies', '/api/home', `/api/branches/${show.branchId}`, `/api/shows/${show._id}/seats`]) {
+      const response = await request(app).get(path)
+      expect(response.status).toBe(200)
+      expect(JSON.stringify(response.body)).not.toContain('Protected movie')
+      expect(JSON.stringify(response.body)).not.toContain('Protected original')
+    }
+    const access = await initial()
+    expect(access.body).not.toHaveProperty('data')
+    const details = await reuse(access.body.apiRequestId)
+    expect(details.status).toBe(200)
+    expect(details.body.data.movie.description).toBe('Protected movie description')
+    expect(details.body.data.shows).toHaveLength(1)
+  })
+
+  it.each(['inactive', 'archived'])('refuses access to an %s movie', async (state) => {
+    await models.Movie.updateOne({ _id: show.movieId }, { $set: state === 'inactive' ? { active: false } : { archived: true } })
+    const response = await initial()
+    expect(response.status).toBe(404)
+    expect(response.body).not.toHaveProperty('apiRequestId')
+  })
+
+  it('bootstrap binds to the session user and ignores supplied user IDs', async () => {
+    const response = await request(app).post(`/api/movies/${show.movieId}/request-access`).set('Cookie', userACookie).send({ userId: userB._id })
+    expect(response.status).toBe(200)
+    expect((await reuse(response.body.apiRequestId)).status).toBe(200)
+    expect((await reuse(response.body.apiRequestId, userB._id, show.movieId, userBCookie)).status).toBe(403)
+    await models.Movie.updateOne({ _id: show.movieId }, { $set: { archived: true } })
+    expect((await reuse(response.body.apiRequestId)).status).toBe(404)
+  })
+
+  it('generates and reuses an ID with cookie or bearer authentication without writing to MongoDB', async () => {
+    const collectionsBefore = await mongoose.connection.db.listCollections().toArray()
+    const movieBefore = await models.Movie.findById(show.movieId).lean()
+    const userBefore = await models.User.findById(userA._id).lean()
+    const first = await initial()
+    expect(first.status).toBe(200)
+    expect(first.body.apiRequestId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(first.body.expiresIn).toBe(1800)
+    expect(first.headers['cache-control']).toBe('no-store')
+    const second = await initial()
+    expect(second.body.apiRequestId).toBe(first.body.apiRequestId)
+    expect(second.body.expiresAt).toBe(first.body.expiresAt)
+    const reused = await reuse(first.body.apiRequestId)
+    expect(reused.status).toBe(200)
+    expect(reused.body.success).toBe(true)
+    expect(reused.body.data.movie._id).toBe(show.movieId.toString())
+    expect(reused.body.data.shows).toHaveLength(1)
+    expect(first.body).not.toHaveProperty('data')
+    const bearer = decodeURIComponent(userACookie[0].split(';')[0].slice('cinema_session='.length))
+    const viaBearer = await request(app).post(`/api/movies/${show.movieId}/request-access`).set('Authorization', `Bearer ${bearer}`)
+    expect(viaBearer.status).toBe(200)
+    expect(viaBearer.body.apiRequestId).toBe(first.body.apiRequestId)
+    expect((await request(app).get(`/api/movies/${show.movieId}/${userA._id}/${first.body.apiRequestId}`).set('Authorization', `Bearer ${bearer}`)).status).toBe(200)
+    expect(await mongoose.connection.db.listCollections().toArray()).toEqual(collectionsBefore)
+    expect(await models.Movie.findById(show.movieId).lean()).toEqual(movieBefore)
+    expect(await models.User.findById(userA._id).lean()).toEqual(userBefore)
+  })
+
+  it('rejects unknown IDs, missing/invalid authentication, URL impersonation, and wrong resources', async () => {
+    const first = await initial()
+    expect((await reuse('unknown')).body).toEqual({ success: false, error: 'Invalid API request ID' })
+    expect((await reuse('unknown')).status).toBe(401)
+    expect((await request(app).get(`/api/movies/${show.movieId}/${userA._id}/${first.body.apiRequestId}`)).status).toBe(401)
+    expect((await request(app).post(`/api/movies/${show.movieId}/request-access`).set('Authorization', 'Bearer invalid')).status).toBe(401)
+    const impersonation = await reuse(first.body.apiRequestId, userA._id, show.movieId, userBCookie)
+    expect(impersonation.status).toBe(403)
+    expect(impersonation.body.error).toBe('User ID does not match authenticated user')
+    const otherUser = await reuse(first.body.apiRequestId, userB._id, show.movieId, userBCookie)
+    expect(otherUser.status).toBe(403)
+    expect(otherUser.body.error).toBe('API request ID does not match this user or resource')
+    const otherMovie = await models.Movie.create({ title: 'Other movie', durationMinutes: 90 })
+    const mismatch = await reuse(first.body.apiRequestId, userA._id, otherMovie._id)
+    expect(mismatch.status).toBe(403)
+    expect(mismatch.body.error).toBe('API request ID does not match this user or resource')
+  })
+
+  it('does not refresh expiry and rejects at the exact original deadline', async () => {
+    const now = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    try {
+      const first = await initial()
+      expect(first.body.expiresAt).toBe(new Date(now + 1_800_000).toISOString())
+      clock.mockReturnValue(now + 900_000)
+      const second = await initial()
+      expect(second.body.apiRequestId).toBe(first.body.apiRequestId)
+      expect(second.body.expiresAt).toBe(first.body.expiresAt)
+      expect(second.body.expiresIn).toBe(900)
+      expect((await reuse(first.body.apiRequestId)).status).toBe(200)
+      clock.mockReturnValue(now + 1_799_999)
+      expect((await reuse(first.body.apiRequestId)).status).toBe(200)
+      clock.mockReturnValue(now + 1_800_000)
+      const expired = await reuse(first.body.apiRequestId)
+      expect(expired.status).toBe(401)
+      expect(expired.body).toEqual({ success: false, error: 'API request ID expired' })
+      const replacement = await initial()
+      expect(replacement.body.apiRequestId).not.toBe(first.body.apiRequestId)
+      expect(replacement.body.expiresIn).toBe(1800)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('preserves missing/malformed movie errors and does not issue tokens for failed lookups', async () => {
+    const missing = await request(app).post(`/api/movies/${new mongoose.Types.ObjectId()}/request-access`).set('Cookie', userACookie)
+    expect(missing.status).toBe(404)
+    expect(missing.body).not.toHaveProperty('apiRequestId')
+    const malformed = await request(app).post('/api/movies/invalid/request-access').set('Cookie', userACookie)
+    expect(malformed.status).toBe(400)
+    expect(malformed.body).not.toHaveProperty('apiRequestId')
+  })
+
+  it('keeps request IDs and internal failure details out of error logs and responses', async () => {
+    const first = await initial()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const query = vi.spyOn(models.Movie, 'findOne').mockImplementationOnce(() => {
+      throw new Error(`Internal failure ${first.body.apiRequestId}`)
+    })
+    try {
+      const response = await reuse(first.body.apiRequestId)
+      expect(response.status).toBe(500)
+      expect(log).toHaveBeenCalledOnce()
+      expect(JSON.stringify(log.mock.calls)).not.toContain(first.body.apiRequestId)
+      expect(JSON.stringify(response.body)).not.toContain(first.body.apiRequestId)
+      expect(response.body).not.toHaveProperty('stack')
+    } finally {
+      query.mockRestore()
+      log.mockRestore()
+    }
   })
 })
 

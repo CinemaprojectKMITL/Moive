@@ -4,17 +4,44 @@ import { Movie } from '../models/Movie.js'
 import { Show } from '../models/Show.js'
 import { ShowSeat } from '../models/ShowSeat.js'
 import { Theater } from '../models/Theater.js'
+import { getOrCreateApiRequestId, validateApiRequestId } from '../services/ApiRequestStore.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/apiResponse.js'
 import { notFound } from '../utils/errors.js'
 
 const publicShowFilter = (now = new Date()) => ({ status: { $in: ['open', 'scheduled'] }, startsAt: { $gt: now }, bookingOpenAt: { $lte: now }, bookingCloseAt: { $gt: now } })
+const publicMovieFields = 'title posterPath durationMinutes ageRating genres'
+
+async function findAccessibleMovie(movieId) {
+  const movie = await Movie.findOne({ _id: movieId, active: true, archived: false }).lean()
+  if (!movie) throw notFound('ไม่พบภาพยนตร์')
+  return movie
+}
+
+export const requestMovieAccess = asyncHandler(async (req, res) => {
+  const movie = await findAccessibleMovie(req.params.id)
+  const { apiRequestId, expiresAt } = getOrCreateApiRequestId(req.user._id, movie._id)
+  res.set('Cache-Control', 'no-store')
+  res.json({ success: true, apiRequestId, expiresIn: Math.ceil((expiresAt - Date.now()) / 1000), expiresAt: new Date(expiresAt).toISOString() })
+})
+
+export function validateMovieApiRequest(req, res, next) {
+  res.set('Cache-Control', 'no-store')
+  const { id, userId, apiRequestId } = req.params
+  if (String(req.user._id) !== userId) return res.status(403).json({ success: false, error: 'User ID does not match authenticated user' })
+  const result = validateApiRequestId(apiRequestId, userId, id)
+  if (!result.valid) {
+    const errors = { invalid: 'Invalid API request ID', expired: 'API request ID expired', mismatch: 'API request ID does not match this user or resource' }
+    return res.status(result.reason === 'mismatch' ? 403 : 401).json({ success: false, error: errors[result.reason] })
+  }
+  return next()
+}
 
 export const home = asyncHandler(async (_req, res) => {
   const now = new Date()
   const [banners, shows, branches, theaterCount] = await Promise.all([
     Banner.find({ enabled: true, $and: [{ $or: [{ startAt: null }, { startAt: { $lte: now } }] }, { $or: [{ endAt: null }, { endAt: { $gte: now } }] }] }).sort({ sortOrder: 1 }).lean(),
-    Show.find(publicShowFilter(now)).populate('movieId').sort({ startsAt: 1 }).lean(),
+    Show.find(publicShowFilter(now)).populate({ path: 'movieId', select: publicMovieFields, match: { active: true, archived: false } }).sort({ startsAt: 1 }).lean(),
     Branch.find({ active: true }).sort({ name: 1 }).lean(),
     Theater.countDocuments({ active: true }),
   ])
@@ -26,12 +53,11 @@ export const home = asyncHandler(async (_req, res) => {
 export const listMovies = asyncHandler(async (_req, res) => {
   const now = new Date()
   const movieIds = await Show.distinct('movieId', publicShowFilter(now))
-  sendSuccess(res, await Movie.find({ _id: { $in: movieIds }, active: true, archived: false }).sort({ releaseDate: -1 }).lean())
+  sendSuccess(res, await Movie.find({ _id: { $in: movieIds }, active: true, archived: false }).select(publicMovieFields).sort({ releaseDate: -1 }).lean())
 })
 
 export const getMovie = asyncHandler(async (req, res) => {
-  const movie = await Movie.findOne({ _id: req.params.id, archived: false }).lean()
-  if (!movie) throw notFound('ไม่พบภาพยนตร์')
+  const movie = await findAccessibleMovie(req.params.id)
   const shows = await Show.find({ movieId: movie._id, ...publicShowFilter() }).populate('branchId', 'name code address').populate('theaterId', 'name code').sort({ startsAt: 1 }).lean()
   sendSuccess(res, { movie, shows })
 })

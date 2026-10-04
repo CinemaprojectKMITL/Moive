@@ -7,7 +7,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, options = {}) {
+export async function apiResponse(path, options = {}, { notifyUnauthorized = true } = {}) {
   const headers = new Headers(options.headers)
   const isForm = options.body instanceof FormData
   if (options.body && !isForm) headers.set('Content-Type', 'application/json')
@@ -19,11 +19,13 @@ export async function api(path, options = {}) {
   })
   const payload = await response.json().catch(() => ({ success: false, message: 'การตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง' }))
   if (!response.ok || payload.success === false) {
-    if (response.status === 401) window.dispatchEvent(new CustomEvent('auth:unauthorized'))
-    throw new ApiError(payload.message || 'เกิดข้อผิดพลาด', response.status, payload.code, payload.details)
+    if (response.status === 401 && notifyUnauthorized) window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+    throw new ApiError(payload.message || payload.error || 'เกิดข้อผิดพลาด', response.status, payload.code, payload.details)
   }
-  return payload.data
+  return payload
 }
+
+export const api = async (path, options = {}) => (await apiResponse(path, options)).data
 
 export const apiGet = (path) => api(path)
 export const apiPost = (path, body) => api(path, { method: 'POST', body })
