@@ -20,17 +20,10 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
   next()
 })
 
-export const optionalAuth = asyncHandler(async (req, _res, next) => {
-  const token = req.cookies?.cinema_session
-  if (!token) return next()
-  try {
-    const payload = jwt.verify(token, env.JWT_SECRET)
-    req.user = await User.findById(payload.sub).select('username displayName role active').lean()
-  } catch {
-    req.user = null
-  }
-  return next()
-})
+export const optionalAuth = (req, res, next) => {
+  if (!req.cookies?.cinema_session && !req.get('authorization')) return next()
+  return requireAuth(req, res, next)
+}
 
 export const requireRole = (...roles) => (req, _res, next) => {
   if (!req.user || !roles.includes(req.user.role)) return next(forbidden())

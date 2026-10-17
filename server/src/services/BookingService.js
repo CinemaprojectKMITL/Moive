@@ -102,7 +102,7 @@ export class BookingService {
       await session.withTransaction(async () => {
         booking = await Booking.findOne({ _id: bookingId, ...(user.role === 'admin' ? {} : { userId: user._id }) }).session(session)
         if (!booking) throw notFound('ไม่พบการจอง')
-        if (booking.status === 'paid') throw conflict('ไม่สามารถยกเลิกตั๋วที่ชำระแล้วในระบบสาธิต', 'PAID_BOOKING')
+        if (booking.status === 'paid') throw conflict('ไม่สามารถยกเลิกตั๋วที่ชำระแล้ว', 'PAID_BOOKING')
         if (['cancelled', 'expired'].includes(booking.status)) return
         booking.status = 'cancelled'
         booking.cancellationReason = 'USER_CANCELLED'

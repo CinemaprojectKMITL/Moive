@@ -308,6 +308,18 @@ Error:
 
 Expected status codes include 201 for creation, 400 for invalid input, 401/403 for authentication/authorization, 404 for inaccessible ownership-scoped records, and 409 for state conflicts. Raw MongoDB errors and production stack traces are not returned.
 
+### Temporary movie request IDs
+
+Movie details require normal authentication plus a temporary request ID. `GET /api/movies/:movieId` and `GET /api/movies/:movieId/shows` are not registered and return 404, including for authenticated clients. Public home and movie lists expose only card summary fields. Admin catalog APIs remain protected by authentication and the admin role.
+
+First call `POST /api/movies/:movieId/request-access` with a valid `cinema_session` cookie or `Authorization: Bearer <JWT>`. The server uses the session user, checks that the movie is active and not archived, and returns top-level `apiRequestId`, `expiresIn` (remaining seconds), and `expiresAt` (ISO timestamp). This endpoint returns no movie detail.
+
+Fetch details with `GET /api/movies/:movieId/:userId/:apiRequestId` and the same authentication. The URL user must match the authenticated user's ID; the token must belong to that user and movie. The response is `{ success: true, data: { movie, shows } }`. Repeating the bootstrap request reuses the original ID and deadline while valid.
+
+IDs are cryptographically random UUIDs held in two process-local Maps, expire exactly 30 minutes after creation, and never refresh on reuse. A one-minute cleanup timer removes expired records and index entries; every reusable request also checks expiry. Unknown or cleaned-up IDs return 401 with `error: "Invalid API request ID"`; expired records encountered before cleanup return 401 with `error: "API request ID expired"`. Ownership mismatches return 403. Auth failures retain the normal `code`/`message` response format.
+
+The frontend movie helper caches IDs per authenticated user and movie in sessionStorage, shares concurrent operations, and obtains a replacement through the bootstrap endpoint after expiry or a token-related 401/403. It retries the protected read at most once per operation. Movie detail pages use the existing login guard. No request IDs are persisted to MongoDB or Redis; restarting the API loses them. This flow assumes a single API process. Access and detail responses use `Cache-Control: no-store`.
+
 ## Troubleshooting
 
 - **API waits for MongoDB:** inspect `docker compose logs mongodb mongo-init api`. The initializer is designed to be safely rerun after an existing replica set starts.

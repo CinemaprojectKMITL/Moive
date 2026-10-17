@@ -29,11 +29,11 @@ export default function App() {
       <Route index element={<HomePage />} />
       <Route path="login" element={<AuthPage mode="login" />} />
       <Route path="register" element={<AuthPage mode="register" />} />
-      <Route path="movies/:movieId" element={<MovieDetailsPage />} />
       <Route path="branches" element={<BranchesPage />} />
       <Route path="branches/:branchId" element={<BranchDetailsPage />} />
       <Route path="shows/:showId/seats" element={<SeatSelectionPage />} />
       <Route element={<ProtectedRoute />}>
+        <Route path="movies/:movieId" element={<MovieDetailsPage />} />
         <Route path="checkout/:bookingId" element={<CheckoutPage />} />
         <Route path="my-bookings" element={<MyBookingsPage />} />
       </Route>
