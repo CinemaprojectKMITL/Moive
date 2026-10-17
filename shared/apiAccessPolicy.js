@@ -1,6 +1,7 @@
 // Explicit operation allowlist shared by the server gate and browser transport.
 // Query filters/pagination do not change authority within a scoped collection.
 export const protectedEndpoints = [
+  ['GET', '/home', 'home', 'read', 'collection'],
   ['GET', '/auth/me', 'profile', 'read', 'self'],
   ['GET', '/shows/:id/seats', 'seat', 'read', 'id'],
   ['POST', '/bookings', 'booking', 'create', 'showId'],

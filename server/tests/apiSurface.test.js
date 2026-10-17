@@ -7,7 +7,7 @@ import adminRoutes from '../src/routes/adminRoutes.js'
 import { createApp } from '../src/app.js'
 
 const publicControls = new Set([
-  'GET /home', 'GET /movies', 'GET /branches', 'GET /branches/:id', 'GET /branches/:id/shows',
+  'GET /movies', 'GET /branches', 'GET /branches/:id', 'GET /branches/:id/shows',
   'POST /auth/register', 'POST /auth/login', 'POST /auth/logout',
 ])
 const movieFlow = new Set(['POST /movies/:id/request-access', 'GET /movies/:id/:userId/:apiRequestId'])

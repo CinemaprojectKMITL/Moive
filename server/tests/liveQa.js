@@ -54,13 +54,13 @@ async function register(username) {
 const health = await call('/health')
 assert(health.payload.data.status === 'ok' && health.payload.data.database === 'connected', 'Health check failed')
 
-const home = await call('/home')
+const cookieA = await register(`qa-a-${runId}`)
+const cookieB = await register(`qa-b-${runId}`)
+const home = await call('/home', { cookie: cookieA })
 assert(home.payload.data.branches.length === 5, 'Expected five seeded branches')
 assert(home.payload.data.theaterCount === 25, 'Expected twenty-five seeded theaters')
 assert(home.payload.data.movies.length > 0, 'Expected seeded now-showing movies')
 
-const cookieA = await register(`qa-a-${runId}`)
-const cookieB = await register(`qa-b-${runId}`)
 const movie = home.payload.data.movies[0]
 const movieAccess = await call(`/movies/${movie._id}/request-access`, { cookie: cookieA, method: 'POST' })
 assert(movieAccess.response.status === 200, 'Movie bootstrap failed')

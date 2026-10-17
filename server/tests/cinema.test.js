@@ -129,7 +129,7 @@ describe('movie API request IDs', () => {
     await models.Movie.updateOne({ _id: show.movieId }, { $set: { description: 'Protected movie description', originalTitle: 'Protected original title' } })
     for (const path of ['/api/movies', '/api/home', `/api/branches/${show.branchId}`, `/api/shows/${show._id}/seats`]) {
       const call = request(app).get(path)
-      if (path.includes('/seats')) call.set('Cookie', userACookie)
+      if (path.includes('/seats') || path === '/api/home') call.set('Cookie', userACookie)
       const response = await call
       expect(response.status).toBe(200)
       expect(JSON.stringify(response.body)).not.toContain('Protected movie')
@@ -371,14 +371,30 @@ describe('application-wide scoped API access', () => {
   })
 
   it('preserves public infrastructure and catalogs, blocks HEAD and route variants', async () => {
-    for (const path of ['/api/health', '/api/home', '/api/movies', '/api/branches', `/api/branches/${show.branchId}`, `/api/branches/${show.branchId}/shows`]) expect((await rawRequest(app).get(path)).status).toBe(200)
-    for (const path of ['/api/auth/me/', '/api/AUTH/ME', `/api/shows/${show._id}/seats/`]) {
+    for (const path of ['/api/health', '/api/movies', '/api/branches', `/api/branches/${show.branchId}`, `/api/branches/${show.branchId}/shows`]) expect((await rawRequest(app).get(path)).status).toBe(200)
+    for (const path of ['/api/home', '/api/HOME/', '/api/auth/me/', '/api/AUTH/ME', `/api/shows/${show._id}/seats/`]) {
       expect((await rawRequest(app).get(path).set('Cookie', userACookie)).status).toBe(401)
       expect((await rawRequest(app).head(path).set('Cookie', userACookie)).status).toBe(401)
     }
     expect((await bootstrap('GET', '/health')).status).toBe(404)
     expect((await bootstrap('PUT', '/bookings')).status).toBe(404)
     expect((await rawRequest(app).get('/api/bookings/anything/details').set('Cookie', userACookie)).status).toBe(404)
+  })
+
+  it('requires authenticated scoped access to home data and rejects a different scope', async () => {
+    expect((await rawRequest(app).get('/api/home')).status).toBe(401)
+    expect((await rawRequest(app).post('/api/request-access').send({ method: 'GET', path: '/home' })).status).toBe(401)
+    const access = await bootstrap('GET', '/home')
+    expect(access.status).toBe(200)
+    expect(access.body).not.toHaveProperty('data')
+    const home = await withAccess('get', '/api/home', access.body)
+    expect(home.status).toBe(200)
+    expect(home.body.data.movies).toHaveLength(1)
+    expect(home.body.data.branches).toHaveLength(1)
+    const profile = await bootstrap('GET', '/auth/me')
+    const mismatch = await withAccess('get', '/api/home', profile.body)
+    expect(mismatch.status).toBe(403)
+    expect(mismatch.body.code).toBe('API_REQUEST_ID_MISMATCH')
   })
 
   it('prevents a verification ID from consuming a ticket and a show ID from creating bookings for another show', async () => {

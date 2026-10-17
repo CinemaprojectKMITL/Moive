@@ -176,7 +176,7 @@ describe('shared frontend API access', () => {
   })
 
   it('keeps intentionally public APIs and auth control calls free of access bootstrap', async () => {
-    for (const [path, method] of [['/health', 'GET'], ['/home', 'GET'], ['/movies', 'GET'], ['/branches', 'GET'], ['/branches/branch-a/shows', 'GET'], ['/auth/login', 'POST'], ['/auth/register', 'POST'], ['/auth/logout', 'POST']]) {
+    for (const [path, method] of [['/health', 'GET'], ['/movies', 'GET'], ['/branches', 'GET'], ['/branches/branch-a/shows', 'GET'], ['/auth/login', 'POST'], ['/auth/register', 'POST'], ['/auth/logout', 'POST']]) {
       fetch.mockResolvedValueOnce(success())
       expect(await client.api(path, { method })).toEqual(data)
     }

@@ -316,11 +316,11 @@ Authentication and request IDs are separate layers. JWT/session cookies identify
 
 There are no request-ID MongoDB collections or Redis dependencies. Process/container restarts and redeployment lose all IDs. This implementation assumes one API process; horizontally scaled deployments need a deliberate shared-store design before scaling.
 
-The operation allowlist in `shared/apiAccessPolicy.js` drives the central server gate and the frontend helper. [The complete endpoint audit](docs/api-access-audit.md) lists public endpoints, authenticated reads, mutations, admin operations, and intentional exemptions. Health checks and public card/branch summaries remain public. Login, registration, and logout are authentication controls, so they do not depend on an access ID. Movie and seat detail pages require login.
+The operation allowlist in `shared/apiAccessPolicy.js` drives the central server gate and the frontend helper. [The complete endpoint audit](docs/api-access-audit.md) lists public endpoints, authenticated reads, mutations, admin operations, and intentional exemptions. Health checks and public movie-card/branch summaries remain public. Home-page aggregate data requires authentication and a home:read access ID. Login, registration, and logout are authentication controls, so they do not depend on an access ID. Home, movie and seat detail pages require login.
 
 #### Bootstrap and protected requests
 
-For profile, seats, bookings, payment/tickets, and admin operations, first call `POST /api/request-access` with normal authentication and JSON `{ "method": "GET", "path": "/bookings/BOOKING_ID" }`. For booking creation, also supply `context: { showId }`; for ticket verification/consumption, supply `context: { consume: false/true }`. The server matches an explicit operation policy, determines the user from the verified session, checks resource existence/ownership/admin role, and returns metadata only:
+For home data, profile, seats, bookings, payment/tickets, and admin operations, first call `POST /api/request-access` with normal authentication and JSON `{ "method": "GET", "path": "/bookings/BOOKING_ID" }`. For booking creation, also supply `context: { showId }`; for ticket verification/consumption, supply `context: { consume: false/true }`. The server matches an explicit operation policy, determines the user from the verified session, checks resource existence/ownership/admin role, and returns metadata only:
 
 ```json
 {

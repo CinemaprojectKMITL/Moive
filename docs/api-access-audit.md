@@ -7,7 +7,6 @@ All routes in app.js and server/src/routes were inspected, including nested admi
 | Method and path | Reason |
 | --- | --- |
 | GET /api/health | Docker/reverse proxy/monitoring health; no access bootstrap |
-| GET /api/home | Landing-page cards, banners, branch summaries |
 | GET /api/movies | Movie-card summary fields only |
 | GET /api/branches | Public branch directory |
 | GET /api/branches/:id | Public branch/showtime information, movie summaries only |
@@ -33,6 +32,7 @@ B = authenticated data; C = state-changing operation; D = admin data or mutation
 
 | Category | Method and path | Type:scope | Resource binding |
 | --- | --- | --- | --- |
+| B | GET /api/home | home:read | collection |
 | B | GET /api/movies/:id/:userId/:apiRequestId | movie:read | URL movie ID; authenticated user must match URL user |
 | B | GET /api/auth/me | profile:read | self |
 | B | GET /api/shows/:id/seats | seat:read | URL resource ID |
@@ -79,11 +79,12 @@ Ticket verification additionally resolves consume=true to the separate admin-tic
 
 ## Frontend caller audit
 
-The only browser fetch is in src/api/transport.js, called by src/api/requestAccess.js. src/api/client.js routes every existing API helper through the scope policy, so page callers use protected requests without duplicating access state. src/api/movies.js delegates its URL-based flow to the same layer. AuthContext provides/clears the authenticated identity, and App requires login for movies and seats.
+The only browser fetch is in src/api/transport.js, called by src/api/requestAccess.js. src/api/client.js routes every existing API helper through the scope policy, so page callers use protected requests without duplicating access state. src/api/movies.js delegates its URL-based flow to the same layer. AuthContext provides/clears the authenticated identity, and App requires login for home, movies and seats.
 
 Affected caller files, migrated through the shared client:
 
 - src/contexts/AuthContext.jsx (profile and authentication state)
+- src/pages/HomePage.jsx (authenticated home aggregate)
 - src/pages/MovieDetailsPage.jsx (movie helper)
 - src/pages/SeatSelectionPage.jsx (seat reads, booking creation)
 - src/pages/CheckoutPage.jsx (booking, cancellation, payment QR, debug payment, ticket QR)
@@ -96,7 +97,7 @@ Affected caller files, migrated through the shared client:
 - src/pages/admin/AdminBannersPage.jsx (list/create/update/disable/image upload)
 - src/pages/admin/AdminBookingsPage.jsx (booking list, ticket verify/consume)
 
-HomePage, BranchesPage and BranchDetailsPage use the intentionally public summary endpoints. Components contain no direct protected network calls. server/tests/liveQa.js now bootstraps scoped calls as well; Docker health URLs are unchanged.
+BranchesPage and BranchDetailsPage use the intentionally public summary endpoints. HomePage uses the scoped home:read policy through the shared client. Components contain no direct protected network calls. server/tests/liveQa.js now bootstraps scoped calls as well; Docker health URLs are unchanged.
 
 ## Changed files
 
