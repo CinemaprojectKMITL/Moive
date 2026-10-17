@@ -3,7 +3,9 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { MongoMemoryReplSet } from 'mongodb-memory-server'
-import request from 'supertest'
+import rawRequest from 'supertest'
+import { scopedRequest as request } from './helpers/scopedRequest.js'
+import { protectedEndpoints } from '../../shared/apiAccessPolicy.js'
 import generatePayload from 'promptpay-qr'
 import QRCode from 'qrcode'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -126,7 +128,9 @@ describe('movie API request IDs', () => {
   it('public catalogs expose summaries rather than full movie details', async () => {
     await models.Movie.updateOne({ _id: show.movieId }, { $set: { description: 'Protected movie description', originalTitle: 'Protected original title' } })
     for (const path of ['/api/movies', '/api/home', `/api/branches/${show.branchId}`, `/api/shows/${show._id}/seats`]) {
-      const response = await request(app).get(path)
+      const call = request(app).get(path)
+      if (path.includes('/seats')) call.set('Cookie', userACookie)
+      const response = await call
       expect(response.status).toBe(200)
       expect(JSON.stringify(response.body)).not.toContain('Protected movie')
       expect(JSON.stringify(response.body)).not.toContain('Protected original')
@@ -163,7 +167,7 @@ describe('movie API request IDs', () => {
     expect(first.status).toBe(200)
     expect(first.body.apiRequestId).toMatch(/^[0-9a-f-]{36}$/)
     expect(first.body.expiresIn).toBe(1800)
-    expect(first.headers['cache-control']).toBe('no-store')
+    expect(first.headers['cache-control']).toContain('no-store')
     const second = await initial()
     expect(second.body.apiRequestId).toBe(first.body.apiRequestId)
     expect(second.body.expiresAt).toBe(first.body.expiresAt)
@@ -185,7 +189,7 @@ describe('movie API request IDs', () => {
 
   it('rejects unknown IDs, missing/invalid authentication, URL impersonation, and wrong resources', async () => {
     const first = await initial()
-    expect((await reuse('unknown')).body).toEqual({ success: false, error: 'Invalid API request ID' })
+    expect((await reuse('unknown')).body).toEqual({ success: false, code: 'API_REQUEST_ID_INVALID', error: 'Invalid API request ID' })
     expect((await reuse('unknown')).status).toBe(401)
     expect((await request(app).get(`/api/movies/${show.movieId}/${userA._id}/${first.body.apiRequestId}`)).status).toBe(401)
     expect((await request(app).post(`/api/movies/${show.movieId}/request-access`).set('Authorization', 'Bearer invalid')).status).toBe(401)
@@ -218,7 +222,7 @@ describe('movie API request IDs', () => {
       clock.mockReturnValue(now + 1_800_000)
       const expired = await reuse(first.body.apiRequestId)
       expect(expired.status).toBe(401)
-      expect(expired.body).toEqual({ success: false, error: 'API request ID expired' })
+      expect(expired.body).toEqual({ success: false, code: 'API_REQUEST_ID_EXPIRED', error: 'API request ID expired' })
       const replacement = await initial()
       expect(replacement.body.apiRequestId).not.toBe(first.body.apiRequestId)
       expect(replacement.body.expiresIn).toBe(1800)
@@ -253,6 +257,141 @@ describe('movie API request IDs', () => {
       query.mockRestore()
       log.mockRestore()
     }
+  })
+})
+
+describe('application-wide scoped API access', () => {
+  const bootstrap = (method, path, cookie = userACookie, context) => rawRequest(app).post('/api/request-access').set('Cookie', cookie).send({ method, path, context })
+  const withAccess = (method, path, metadata, cookie = userACookie) => rawRequest(app)[method](path).set('Cookie', cookie).set('X-API-User-ID', metadata.userId).set('X-API-Request-ID', metadata.apiRequestId)
+  const reserve = () => services.BookingService.create({ userId: userA._id, showId: show._id, seatCodes: ['A1'], clientRequestId: 'scoped-api-booking' })
+
+  it('rejects bare calls to every migrated endpoint before executing any operation', async () => {
+    const booking = await reserve()
+    const { Banner } = await import('../src/models/Banner.js')
+    const banner = await Banner.create({ title: 'Scope test', imagePath: '/media/banner.png' })
+    env.ENABLE_DEBUG_PAYMENT = true
+    const ids = { 'admin-movies': show.movieId, 'admin-branches': show.branchId, 'admin-theaters': show.theaterId, 'admin-shows': show._id, 'admin-banners': banner._id, seat: show._id, booking: booking._id, payment: booking._id, ticket: booking._id }
+    for (const [method, template, resourceType] of protectedEndpoints) {
+      const path = `/api${template.replace(':id', String(ids[resourceType]))}`
+      const cookie = template.startsWith('/admin/') ? adminCookie : userACookie
+      const call = rawRequest(app)[method.toLowerCase()](path).set('Cookie', cookie)
+      if (method === 'POST' && template === '/bookings') call.send({ showId: show._id, seats: ['A2'], idempotencyKey: 'must-not-run' })
+      const result = await call
+      expect(result.status, `${method} ${template}`).toBe(401)
+      expect(result.body.code).toBe('API_REQUEST_ID_INVALID')
+      expect(result.body).not.toHaveProperty('data')
+      expect((await rawRequest(app).post('/api/request-access').send({ method, path })).status).toBe(401)
+    }
+    expect(await models.Booking.countDocuments({})).toBe(1)
+    expect((await models.ShowSeat.findOne({ showId: show._id, seatCode: 'A2' })).status).toBe('available')
+  })
+
+  it('bootstraps scoped metadata, reuses the original lifetime, and never persists IDs', async () => {
+    const collectionsBefore = await mongoose.connection.db.listCollections().toArray()
+    const userBefore = await models.User.findById(userA._id).lean()
+    const first = await bootstrap('GET', '/auth/me')
+    expect(first.status).toBe(200)
+    expect(first.body).not.toHaveProperty('data')
+    expect(first.body.userId).toBe(String(userA._id))
+    expect(first.body.expiresIn).toBe(1800)
+    const second = await bootstrap('GET', '/auth/me')
+    expect(second.body.apiRequestId).toBe(first.body.apiRequestId)
+    expect(second.body.expiresAt).toBe(first.body.expiresAt)
+    const profile = await withAccess('get', '/api/auth/me', first.body)
+    expect(profile.status).toBe(200)
+    expect(profile.body.data.user.id).toBe(String(userA._id))
+    expect(await mongoose.connection.db.listCollections().toArray()).toEqual(collectionsBefore)
+    expect(await models.User.findById(userA._id).lean()).toEqual(userBefore)
+  })
+
+  it('rejects unknown IDs, missing auth, identity mismatch, and another user token', async () => {
+    const first = await bootstrap('GET', '/auth/me')
+    const absent = await withAccess('get', '/api/auth/me', { ...first.body, apiRequestId: 'unknown' })
+    expect(absent.status).toBe(401)
+    expect(absent.body.code).toBe('API_REQUEST_ID_INVALID')
+    expect((await rawRequest(app).get('/api/auth/me').set('X-API-User-ID', first.body.userId).set('X-API-Request-ID', first.body.apiRequestId)).status).toBe(401)
+    const impersonation = await withAccess('get', '/api/auth/me', first.body, userBCookie)
+    expect(impersonation.status).toBe(403)
+    expect(impersonation.body.code).toBe('API_REQUEST_USER_MISMATCH')
+    const tokenTheft = await withAccess('get', '/api/auth/me', { ...first.body, userId: String(userB._id) }, userBCookie)
+    expect(tokenTheft.status).toBe(403)
+    expect(tokenTheft.body.code).toBe('API_REQUEST_ID_MISMATCH')
+  })
+
+  it('binds resources, types, and operations independently, keeping idempotency keys separate', async () => {
+    const booking = await reserve()
+    const path = `/api/bookings/${booking._id}`
+    const read = await bootstrap('GET', path)
+    expect((await withAccess('get', path, read.body)).status).toBe(200)
+    const cancel = await withAccess('post', `${path}/cancel`, read.body)
+    expect(cancel.status).toBe(403)
+    expect(cancel.body.code).toBe('API_REQUEST_ID_MISMATCH')
+    expect((await withAccess('get', `${path}/payment-qr`, read.body)).status).toBe(403)
+    expect((await bootstrap('GET', path, userBCookie)).status).toBe(404)
+    const list = await bootstrap('GET', '/bookings/me')
+    expect((await withAccess('get', path, list.body)).status).toBe(403)
+    const secondBooking = await services.BookingService.create({ userId: userA._id, showId: show._id, seatCodes: ['A2'], clientRequestId: 'different-booking' })
+    expect((await withAccess('get', `/api/bookings/${secondBooking._id}`, read.body)).status).toBe(403)
+    const create = await bootstrap('POST', '/bookings', userACookie, { showId: String(show._id) })
+    const payload = { showId: String(show._id), seats: ['A3'], idempotencyKey: 'independent-idempotency' }
+    const created = await withAccess('post', '/api/bookings', create.body).send(payload)
+    const repeated = await withAccess('post', '/api/bookings', create.body).send(payload)
+    expect(created.status).toBe(201)
+    expect(repeated.status).toBe(201)
+    expect(repeated.body.data._id).toBe(created.body.data._id)
+    expect(create.body.apiRequestId).not.toBe(payload.idempotencyKey)
+  })
+
+  it('rejects expiry at the exact deadline and never slides it on bootstrap or access', async () => {
+    const start = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(start)
+    try {
+      const first = await bootstrap('GET', '/auth/me')
+      const deadline = Date.parse(first.body.expiresAt)
+      clock.mockReturnValue(deadline - 1)
+      expect((await withAccess('get', '/api/auth/me', first.body)).status).toBe(200)
+      const again = await bootstrap('GET', '/auth/me')
+      expect(again.body.expiresAt).toBe(first.body.expiresAt)
+      clock.mockReturnValue(deadline)
+      const expired = await withAccess('get', '/api/auth/me', first.body)
+      expect(expired.status).toBe(401)
+      expect(expired.body.code).toBe('API_REQUEST_ID_EXPIRED')
+    } finally { clock.mockRestore() }
+  })
+
+  it('keeps admin authorization authoritative even after a role is revoked', async () => {
+    expect((await bootstrap('GET', '/admin/movies', userACookie)).status).toBe(403)
+    const admin = await models.User.findOne({ role: 'admin' })
+    const access = await bootstrap('GET', '/admin/movies', adminCookie)
+    expect(access.status).toBe(200)
+    expect((await withAccess('get', '/api/admin/movies', access.body, adminCookie)).status).toBe(200)
+    await models.User.updateOne({ _id: admin._id }, { $set: { role: 'user' } })
+    try { expect((await withAccess('get', '/api/admin/movies', access.body, adminCookie)).status).toBe(403) }
+    finally { await models.User.updateOne({ _id: admin._id }, { $set: { role: 'admin' } }) }
+  })
+
+  it('preserves public infrastructure and catalogs, blocks HEAD and route variants', async () => {
+    for (const path of ['/api/health', '/api/home', '/api/movies', '/api/branches', `/api/branches/${show.branchId}`, `/api/branches/${show.branchId}/shows`]) expect((await rawRequest(app).get(path)).status).toBe(200)
+    for (const path of ['/api/auth/me/', '/api/AUTH/ME', `/api/shows/${show._id}/seats/`]) {
+      expect((await rawRequest(app).get(path).set('Cookie', userACookie)).status).toBe(401)
+      expect((await rawRequest(app).head(path).set('Cookie', userACookie)).status).toBe(401)
+    }
+    expect((await bootstrap('GET', '/health')).status).toBe(404)
+    expect((await bootstrap('PUT', '/bookings')).status).toBe(404)
+    expect((await rawRequest(app).get('/api/bookings/anything/details').set('Cookie', userACookie)).status).toBe(404)
+  })
+
+  it('prevents a verification ID from consuming a ticket and a show ID from creating bookings for another show', async () => {
+    const verify = await bootstrap('POST', '/admin/tickets/verify', adminCookie, { consume: false })
+    const consumed = await withAccess('post', '/api/admin/tickets/verify', verify.body, adminCookie).send({ token: 'not-a-ticket', consume: true })
+    expect(consumed.status).toBe(403)
+    expect(consumed.body.code).toBe('API_REQUEST_ID_MISMATCH')
+    const otherShow = await models.Show.create({ movieId: show.movieId, branchId: show.branchId, theaterId: show.theaterId, startsAt: new Date(show.startsAt.getTime() + 86_400_000), endsAt: new Date(show.endsAt.getTime() + 86_400_000), pricing: show.pricing, status: 'open', bookingOpenAt: show.bookingOpenAt, bookingCloseAt: new Date(show.bookingCloseAt.getTime() + 86_400_000) })
+    const access = await bootstrap('POST', '/bookings', userACookie, { showId: String(show._id) })
+    const crossed = await withAccess('post', '/api/bookings', access.body).send({ showId: otherShow._id, seats: ['A1'], idempotencyKey: 'cross-show' })
+    expect(crossed.status).toBe(403)
+    expect(crossed.body.code).toBe('API_REQUEST_ID_MISMATCH')
+    expect(await models.Booking.countDocuments({})).toBe(0)
   })
 })
 

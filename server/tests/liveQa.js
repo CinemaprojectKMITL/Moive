@@ -1,19 +1,48 @@
+import crypto from 'node:crypto'
+import { resolveAccessPolicy } from '../../shared/apiAccessPolicy.js'
+
 const baseUrl = process.env.QA_BASE_URL || 'http://127.0.0.1:3000/api'
-const runId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const runId = crypto.randomUUID()
 
 function assert(condition, message) {
   if (!condition) throw new Error(message)
 }
 
-async function call(path, { cookie, method = 'GET', body } = {}) {
+async function rawCall(path, { cookie, method = 'GET', body, access } = {}) {
   const options = {
     method,
-    headers: { ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': 'application/json' } : {}) },
+    headers: { ...(cookie ? { cookie } : {}), ...(body ? { 'content-type': 'application/json' } : {}), ...(access ? { 'X-API-User-ID': access.userId, 'X-API-Request-ID': access.apiRequestId } : {}) },
   }
   if (body) options.body = JSON.stringify(body)
   const response = await fetch(`${baseUrl}${path}`, options)
   const payload = await response.json()
   return { response, payload, cookie: response.headers.get('set-cookie')?.split(';')[0] }
+}
+
+const accessCache = new Map()
+async function call(path, options = {}) {
+  const policy = resolveAccessPolicy(options.method || 'GET', path, options.body)
+  if (!policy) return rawCall(path, options)
+  const key = JSON.stringify([options.cookie, policy])
+  let access = accessCache.get(key)
+  const bootstrap = async () => {
+    const result = await rawCall('/request-access', { cookie: options.cookie, method: 'POST', body: { method: options.method || 'GET', path, context: { showId: options.body?.showId, consume: options.body?.consume } } })
+    if (result.response.status === 200) accessCache.set(key, result.payload)
+    return result
+  }
+  if (!access || Date.now() >= Date.parse(access.expiresAt)) {
+    const result = await bootstrap()
+    if (result.response.status !== 200) return result
+    access = result.payload
+  }
+  let result = await rawCall(path, { ...options, access })
+  if (['API_REQUEST_ID_INVALID', 'API_REQUEST_ID_EXPIRED', 'API_REQUEST_ID_MISMATCH'].includes(result.payload.code)) {
+    accessCache.delete(key)
+    const refreshed = await bootstrap()
+    if (refreshed.response.status !== 200) return refreshed
+    result = await rawCall(path, { ...options, access: refreshed.payload })
+  }
+  return result
 }
 
 async function register(username) {
@@ -30,17 +59,19 @@ assert(home.payload.data.branches.length === 5, 'Expected five seeded branches')
 assert(home.payload.data.theaterCount === 25, 'Expected twenty-five seeded theaters')
 assert(home.payload.data.movies.length > 0, 'Expected seeded now-showing movies')
 
+const cookieA = await register(`qa-a-${runId}`)
+const cookieB = await register(`qa-b-${runId}`)
 const movie = home.payload.data.movies[0]
-const movieDetails = await call(`/movies/${movie._id}`)
+const movieAccess = await call(`/movies/${movie._id}/request-access`, { cookie: cookieA, method: 'POST' })
+assert(movieAccess.response.status === 200, 'Movie bootstrap failed')
+const movieDetails = await call(`/movies/${movie._id}/${movieAccess.payload.userId}/${movieAccess.payload.apiRequestId}`, { cookie: cookieA })
 const show = movieDetails.payload.data.shows[0]
 assert(show, 'Expected a future seeded show')
-const seatMap = await call(`/shows/${show._id}/seats`)
+const seatMap = await call(`/shows/${show._id}/seats`, { cookie: cookieA })
 assert(seatMap.payload.data.seats.length === 300, 'Expected a 300-seat show map')
 const available = seatMap.payload.data.seats.filter((seat) => seat.status === 'available')
 assert(available.length >= 3, 'Expected available QA seats')
 
-const cookieA = await register(`qa-a-${runId}`)
-const cookieB = await register(`qa-b-${runId}`)
 const bookingResult = await call('/bookings', { cookie: cookieA, method: 'POST', body: { showId: show._id, seats: [available[0].seatCode], idempotencyKey: `qa-book-${runId}` } })
 assert(bookingResult.response.status === 201, `Checkout failed: ${bookingResult.payload.message}`)
 const booking = bookingResult.payload.data
@@ -66,7 +97,7 @@ const raceResponses = await Promise.all([
   call('/bookings', { cookie: cookieB, method: 'POST', body: { showId: show._id, seats: [raceSeat], idempotencyKey: `qa-race-b-${runId}` } }),
 ])
 assert(raceResponses.every((result) => result.response.status === 409 && result.payload.code === 'RACE_CONFLICT'), 'Strict race did not cancel both attempts')
-const refreshed = await call(`/shows/${show._id}/seats`)
+const refreshed = await call(`/shows/${show._id}/seats`, { cookie: cookieA })
 assert(refreshed.payload.data.seats.find((seat) => seat.seatCode === raceSeat).status === 'available', 'Strict race left a seat locked')
 
 console.log(JSON.stringify({

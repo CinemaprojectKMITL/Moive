@@ -17,13 +17,23 @@ afterEach(() => {
 })
 
 describe('RAM API request IDs', () => {
+  it('separates resource types, resource IDs, users, and operation scopes', () => {
+    const access = { resourceType: 'booking', resourceId: 'booking-a', scope: 'read' }
+    const issued = store.getOrCreateApiRequestId('user-a', access)
+    expect(store.getOrCreateApiRequestId('user-a', access)).toEqual(issued)
+    for (const other of [{ ...access, scope: 'cancel' }, { ...access, resourceType: 'payment' }, { ...access, resourceId: 'booking-b' }]) {
+      expect(store.validateApiRequestId(issued.apiRequestId, 'user-a', other).reason).toBe('mismatch')
+      expect(store.getOrCreateApiRequestId('user-a', other).apiRequestId).not.toBe(issued.apiRequestId)
+    }
+    expect(store.validateApiRequestId(issued.apiRequestId, 'user-b', access).reason).toBe('mismatch')
+  })
   it('generates a UUID and reuses it without changing creation or expiration', () => {
     const first = store.getOrCreateApiRequestId('user-a', 'movie-a')
     expect(first.apiRequestId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     expect(first.expiresAt).toBe(start.getTime() + ttl)
     vi.setSystemTime(start.getTime() + ttl - 1)
     expect(store.getOrCreateApiRequestId('user-a', 'movie-a')).toEqual(first)
-    expect(store.validateApiRequestId(first.apiRequestId, 'user-a', 'movie-a')).toEqual({ valid: true, record: { userId: 'user-a', movieId: 'movie-a', createdAt: start.getTime(), expiresAt: first.expiresAt } })
+    expect(store.validateApiRequestId(first.apiRequestId, 'user-a', 'movie-a')).toEqual({ valid: true, record: { userId: 'user-a', resourceType: 'movie', resourceId: 'movie-a', scope: 'read', createdAt: start.getTime(), expiresAt: first.expiresAt } })
   })
 
   it('rejects expiry at exactly 30 minutes before cleanup runs and replaces the index', () => {
