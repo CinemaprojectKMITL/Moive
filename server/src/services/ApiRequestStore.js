@@ -3,16 +3,18 @@ import crypto from 'node:crypto'
 const REQUEST_TTL_MS = 30 * 60 * 1000
 const apiRequestStore = new Map()
 const activeRequestByUserResource = new Map()
-const resourceKey = (userId, movieId) => JSON.stringify([String(userId), String(movieId)])
+const descriptor = (resource) => typeof resource === 'string' ? { resourceType: 'movie', resourceId: resource, scope: 'read' } : resource
+const resourceKey = (userId, resource) => JSON.stringify([String(userId), resource.resourceType, String(resource.resourceId), resource.scope])
 
 function removeRequest(apiRequestId, record) {
   apiRequestStore.delete(apiRequestId)
-  const key = resourceKey(record.userId, record.movieId)
+  const key = resourceKey(record.userId, record)
   if (activeRequestByUserResource.get(key) === apiRequestId) activeRequestByUserResource.delete(key)
 }
 
-export function getOrCreateApiRequestId(userId, movieId) {
-  const key = resourceKey(userId, movieId)
+export function getOrCreateApiRequestId(userId, resource) {
+  resource = descriptor(resource)
+  const key = resourceKey(userId, resource)
   const existingId = activeRequestByUserResource.get(key)
   const existing = apiRequestStore.get(existingId)
   const now = Date.now()
@@ -21,20 +23,21 @@ export function getOrCreateApiRequestId(userId, movieId) {
   else activeRequestByUserResource.delete(key)
 
   const apiRequestId = crypto.randomUUID()
-  const record = { userId: String(userId), movieId: String(movieId), createdAt: now, expiresAt: now + REQUEST_TTL_MS }
+  const record = { userId: String(userId), resourceType: resource.resourceType, resourceId: String(resource.resourceId), scope: resource.scope, createdAt: now, expiresAt: now + REQUEST_TTL_MS }
   apiRequestStore.set(apiRequestId, record)
   activeRequestByUserResource.set(key, apiRequestId)
   return { apiRequestId, expiresAt: record.expiresAt }
 }
 
-export function validateApiRequestId(apiRequestId, userId, movieId) {
+export function validateApiRequestId(apiRequestId, userId, resource) {
+  resource = descriptor(resource)
   const record = apiRequestStore.get(apiRequestId)
   if (!record) return { valid: false, reason: 'invalid' }
   if (Date.now() >= record.expiresAt) {
     removeRequest(apiRequestId, record)
     return { valid: false, reason: 'expired' }
   }
-  if (record.userId !== String(userId) || record.movieId !== String(movieId)) return { valid: false, reason: 'mismatch' }
+  if (resourceKey(record.userId, record) !== resourceKey(userId, resource)) return { valid: false, reason: 'mismatch' }
   return { valid: true, record: { ...record } }
 }
 

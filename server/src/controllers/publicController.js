@@ -4,7 +4,8 @@ import { Movie } from '../models/Movie.js'
 import { Show } from '../models/Show.js'
 import { ShowSeat } from '../models/ShowSeat.js'
 import { Theater } from '../models/Theater.js'
-import { getOrCreateApiRequestId, validateApiRequestId } from '../services/ApiRequestStore.js'
+import { validateApiRequestId } from '../services/ApiRequestStore.js'
+import { sendAccessMetadata, sendRequestIdError } from '../middleware/apiRequestAccess.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { sendSuccess } from '../utils/apiResponse.js'
 import { notFound } from '../utils/errors.js'
@@ -20,9 +21,7 @@ async function findAccessibleMovie(movieId) {
 
 export const requestMovieAccess = asyncHandler(async (req, res) => {
   const movie = await findAccessibleMovie(req.params.id)
-  const { apiRequestId, expiresAt } = getOrCreateApiRequestId(req.user._id, movie._id)
-  res.set('Cache-Control', 'no-store')
-  res.json({ success: true, apiRequestId, expiresIn: Math.ceil((expiresAt - Date.now()) / 1000), expiresAt: new Date(expiresAt).toISOString() })
+  sendAccessMetadata(res, req.user._id, { resourceType: 'movie', resourceId: String(movie._id), scope: 'read' })
 })
 
 export function validateMovieApiRequest(req, res, next) {
@@ -31,8 +30,7 @@ export function validateMovieApiRequest(req, res, next) {
   if (String(req.user._id) !== userId) return res.status(403).json({ success: false, error: 'User ID does not match authenticated user' })
   const result = validateApiRequestId(apiRequestId, userId, id)
   if (!result.valid) {
-    const errors = { invalid: 'Invalid API request ID', expired: 'API request ID expired', mismatch: 'API request ID does not match this user or resource' }
-    return res.status(result.reason === 'mismatch' ? 403 : 401).json({ success: false, error: errors[result.reason] })
+    return sendRequestIdError(res, result.reason)
   }
   return next()
 }

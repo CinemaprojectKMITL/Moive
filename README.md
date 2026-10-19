@@ -308,17 +308,63 @@ Error:
 
 Expected status codes include 201 for creation, 400 for invalid input, 401/403 for authentication/authorization, 404 for inaccessible ownership-scoped records, and 409 for state conflicts. Raw MongoDB errors and production stack traces are not returned.
 
-### Temporary movie request IDs
+### Scoped API request IDs
 
-Movie details require normal authentication plus a temporary request ID. `GET /api/movies/:movieId` and `GET /api/movies/:movieId/shows` are not registered and return 404, including for authenticated clients. Public home and movie lists expose only card summary fields. Admin catalog APIs remain protected by authentication and the admin role.
+Authentication and request IDs are separate layers. JWT/session cookies identify the user; ownership checks and admin roles decide authorization. A request ID adds a narrowly scoped, temporary permission to invoke an operation. Possessing an ID never grants login or an admin role. Cloudflare Access remains an outer layer; these rules also apply to internal requests that bypass Cloudflare.
 
-First call `POST /api/movies/:movieId/request-access` with a valid `cinema_session` cookie or `Authorization: Bearer <JWT>`. The server uses the session user, checks that the movie is active and not archived, and returns top-level `apiRequestId`, `expiresIn` (remaining seconds), and `expiresAt` (ISO timestamp). This endpoint returns no movie detail.
+`server/src/services/ApiRequestStore.js` is the only request-ID store. It keeps cryptographically random UUIDs in two JavaScript Maps, indexed by `(userId, resourceType, resourceId, scope)`. Records include `createdAt` and an absolute `expiresAt` exactly 30 minutes later. Repeated bootstrap requests reuse a still-valid ID without refreshing its deadline. Every protected request checks expiry. A one-minute timer removes expired records and their index entries and uses `.unref()`.
 
-Fetch details with `GET /api/movies/:movieId/:userId/:apiRequestId` and the same authentication. The URL user must match the authenticated user's ID; the token must belong to that user and movie. The response is `{ success: true, data: { movie, shows } }`. Repeating the bootstrap request reuses the original ID and deadline while valid.
+There are no request-ID MongoDB collections or Redis dependencies. Process/container restarts and redeployment lose all IDs. This implementation assumes one API process; horizontally scaled deployments need a deliberate shared-store design before scaling.
 
-IDs are cryptographically random UUIDs held in two process-local Maps, expire exactly 30 minutes after creation, and never refresh on reuse. A one-minute cleanup timer removes expired records and index entries; every reusable request also checks expiry. Unknown or cleaned-up IDs return 401 with `error: "Invalid API request ID"`; expired records encountered before cleanup return 401 with `error: "API request ID expired"`. Ownership mismatches return 403. Auth failures retain the normal `code`/`message` response format.
+The operation allowlist in `shared/apiAccessPolicy.js` drives the central server gate and the frontend helper. [The complete endpoint audit](docs/api-access-audit.md) lists public endpoints, authenticated reads, mutations, admin operations, and intentional exemptions. Health checks and public movie-card/branch summaries remain public. Home-page aggregate data requires authentication and a home:read access ID. Login, registration, and logout are authentication controls, so they do not depend on an access ID. Home, movie and seat detail pages require login.
 
-The frontend movie helper caches IDs per authenticated user and movie in sessionStorage, shares concurrent operations, and obtains a replacement through the bootstrap endpoint after expiry or a token-related 401/403. It retries the protected read at most once per operation. Movie detail pages use the existing login guard. No request IDs are persisted to MongoDB or Redis; restarting the API loses them. This flow assumes a single API process. Access and detail responses use `Cache-Control: no-store`.
+#### Bootstrap and protected requests
+
+For home data, profile, seats, bookings, payment/tickets, and admin operations, first call `POST /api/request-access` with normal authentication and JSON `{ "method": "GET", "path": "/bookings/BOOKING_ID" }`. For booking creation, also supply `context: { showId }`; for ticket verification/consumption, supply `context: { consume: false/true }`. The server matches an explicit operation policy, determines the user from the verified session, checks resource existence/ownership/admin role, and returns metadata only:
+
+```json
+{
+  "success": true,
+  "userId": "USER_ID",
+  "apiRequestId": "SECURE_UUID",
+  "expiresIn": 1800,
+  "expiresAt": "2026-10-17T13:30:00.000Z"
+}
+```
+
+Send `X-API-User-ID: USER_ID` and `X-API-Request-ID: SECURE_UUID` on the actual operation, together with the normal session cookie or bearer JWT. URLs for these operations are retained, but calls omitting the access headers are rejected before the controller, upload middleware, or transaction runs. The user, resource type/ID, scope, current ownership, and current admin role are validated. Collection IDs permit only the named collection operation; pagination/filter changes do not grant additional authority. Ticket `verify` and `consume` use different scopes. Booking `create` is bound to the requested show.
+
+Movies retain their existing explicit flow: authenticated `POST /api/movies/:movieId/request-access`, then `GET /api/movies/:movieId/:userId/:apiRequestId`. The bootstrap returns no movie data. Bare `GET /api/movies/:movieId` and `/api/movies/:movieId/shows` stay unregistered (404). General tokens and movie tokens share the same RAM service and cleanup.
+
+Authentication failures return the usual `UNAUTHORIZED` code; role/ownership failures retain the application's 403/404 behavior. Token errors use `API_REQUEST_ID_INVALID` or `API_REQUEST_ID_EXPIRED` (401), or `API_REQUEST_ID_MISMATCH` (403). A supplied user identity differing from the session returns `API_REQUEST_USER_MISMATCH` (403). Bootstrap/detail responses use `Cache-Control: private, no-store` (movie detail may use `no-store`). Full request IDs are omitted from error logs.
+
+#### Browser cache and retry behavior
+
+All `api`, `apiGet`, `apiPost`, `apiPatch`, `apiDelete`, and `apiResponse` calls pass through `src/api/requestAccess.js`. The existing movie helper delegates to this same layer. Pages receive the same `data` payloads as before. Cookies, custom headers, JSON bodies, query strings, and multipart uploads are preserved.
+
+The helper caches metadata in sessionStorage under `api-request:<userId>:<resourceType>:<resourceId>:<scope>`, checks the expiry before reuse, and falls back to RAM when storage is blocked. Valid cache entries survive page refreshes. The auth context supplies the existing user ID; cold-start profile bootstrap uses the verified session's ID returned in metadata. Logout clears these temporary entries. Concurrent bootstraps and identical GETs share an in-flight operation; distinct mutations are never collapsed.
+
+On a stable request-ID rejection code, the helper clears the rejected entry, obtains a new scoped ID, and retries the protected operation **at most once**. This recovers from server restarts without manually refreshing. It does not retry ordinary authentication failures, ownership/role errors, booking/payment conflicts, or network errors. A failed replacement is propagated; there is no loop.
+
+Request IDs and idempotency keys remain independent. An access ID answers whether the authenticated user can invoke this resource operation. The existing booking `idempotencyKey` identifies a mutation already processed. The helper preserves the same idempotency key and body across an authorized retry; booking transactions, seat locks, expiry, and race protections remain authoritative.
+
+#### End-to-end example
+
+With an existing authenticated cookie jar and a booking owned by that user:
+
+```bash
+# 1. Bootstrap a booking-read ID (no booking details in this response).
+curl -b cookies.txt -X POST https://HOST/api/request-access \
+  -H 'Content-Type: application/json' \
+  -d '{"method":"GET","path":"/bookings/BOOKING_ID"}'
+
+# 2. Substitute userId and apiRequestId from the response; reuse until its original expiry.
+curl -b cookies.txt https://HOST/api/bookings/BOOKING_ID \
+  -H 'X-API-User-ID: USER_ID' \
+  -H 'X-API-Request-ID: SECURE_UUID'
+```
+
+An ID bootstrapped for this read cannot cancel the booking, generate its payment QR, read another booking, or call an admin API. Each of those operations needs its own authorized scope.
 
 ## Troubleshooting
 

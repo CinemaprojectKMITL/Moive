@@ -26,13 +26,13 @@ const AdminBannersPage = lazyNamed(() => import('./pages/admin/AdminBannersPage'
 export default function App() {
   return <Suspense fallback={<LoadingState />}><Routes>
     <Route element={<CustomerLayout />}>
-      <Route index element={<HomePage />} />
       <Route path="login" element={<AuthPage mode="login" />} />
       <Route path="register" element={<AuthPage mode="register" />} />
       <Route path="branches" element={<BranchesPage />} />
       <Route path="branches/:branchId" element={<BranchDetailsPage />} />
-      <Route path="shows/:showId/seats" element={<SeatSelectionPage />} />
       <Route element={<ProtectedRoute />}>
+        <Route index element={<HomePage />} />
+        <Route path="shows/:showId/seats" element={<SeatSelectionPage />} />
         <Route path="movies/:movieId" element={<MovieDetailsPage />} />
         <Route path="checkout/:bookingId" element={<CheckoutPage />} />
         <Route path="my-bookings" element={<MyBookingsPage />} />

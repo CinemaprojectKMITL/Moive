@@ -10,8 +10,9 @@ export function errorHandler(error, req, res, _next) {
   if (error instanceof mongoose.Error.ValidationError) normalized = new AppError(400, 'VALIDATION_ERROR', 'ข้อมูลไม่ถูกต้อง')
   if (!(normalized instanceof AppError)) {
     // Router params may already be cleared when errors reach this app-level handler.
-    const hasRequestId = /^\/api\/movies\/[^/?]+\/[^/?]+\/[^/?]+(?:\?|$)/.test(req.originalUrl)
-    logger.error('request.failed', { method: req.method, path: hasRequestId ? '/api/movies/:id/:userId/:apiRequestId' : req.originalUrl, message: hasRequestId ? 'Movie request failed' : error.message, stack: isProduction || hasRequestId ? undefined : error.stack })
+    const movieTokenPath = /^\/api\/movies\/[^/?]+\/[^/?]+\/[^/?]+(?:\?|$)/.test(req.originalUrl)
+    const hasRequestId = movieTokenPath || Boolean(req.get('X-API-Request-ID'))
+    logger.error('request.failed', { method: req.method, path: movieTokenPath ? '/api/movies/:id/:userId/:apiRequestId' : req.path, message: hasRequestId ? 'Protected request failed' : error.message, stack: isProduction || hasRequestId ? undefined : error.stack })
     normalized = new AppError(500, 'INTERNAL_ERROR', 'ระบบขัดข้อง กรุณาลองใหม่')
   }
   res.status(normalized.status).json({
