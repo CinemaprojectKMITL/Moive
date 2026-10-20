@@ -62,6 +62,7 @@ export function Navbar() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === '/'}
               onClick={() => setOpen(false)}
             >
               {item.label}
